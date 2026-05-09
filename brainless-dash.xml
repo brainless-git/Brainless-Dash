@@ -7,13 +7,13 @@
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support/>
-  <Project/>
+  <Support>https://github.com/brainless-git/brainless-dash/issues</Support>
+  <Project>https://github.com/brainless-git/brainless-dash</Project>
   <Overview>Brainless-Dash: a lightweight, mobile-first Unraid dashboard. CPU, memory, temperatures, storage capacity per array disk and live network bandwidth. Read-only, runs as non-root, no privileged mode.</Overview>
   <Category>Tools: Status: Network:Management</Category>
   <WebUI>http://[IP]:[PORT:8090]/</WebUI>
-  <TemplateURL/>
-  <Icon/>
+  <TemplateURL>https://raw.githubusercontent.com/brainless-git/brainless-dash/main/brainless-dash.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/brainless-git/brainless-dash/main/assets/icon.svg</Icon>
   <ExtraParams>--pid=host</ExtraParams>
   <PostArgs/>
   <CPUset/>

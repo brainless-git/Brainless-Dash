@@ -271,6 +271,7 @@ def get_sonarr_calendar():
         f"{_SONARR_URL}/api/v3/calendar"
         f"?apikey={_SONARR_API_KEY}"
         f"&start={today.isoformat()}&end={end.isoformat()}"
+        f"&includeSeries=true"
     )
     try:
         with urllib.request.urlopen(urllib.request.Request(url), timeout=5) as resp:

@@ -62,6 +62,11 @@ if [ -n "$ACME_DOMAIN" ] && [ -n "$ACME_EMAIL" ]; then
         echo "[acme] Using HTTP-01 challenge on port ${ACME_CHALLENGE_PORT:-8180}"
     fi
 
+    # Certbot warns and ignores credentials files that are world/group readable.
+    if [ -n "$ACME_DNS_CREDENTIALS" ] && [ -f "$ACME_DNS_CREDENTIALS" ]; then
+        chmod 600 "$ACME_DNS_CREDENTIALS" 2>/dev/null || true
+    fi
+
     if [ ! -f "$LIVE/fullchain.pem" ]; then
         echo "[acme] Obtaining certificate for $ACME_DOMAIN..."
         certbot certonly \
@@ -80,7 +85,10 @@ if [ -n "$ACME_DOMAIN" ] && [ -n "$ACME_EMAIL" ]; then
 
     if [ -f "$LIVE/fullchain.pem" ]; then
         # Make cert files readable by monitor (UID 1001) before dropping privileges.
-        chown -R monitor:monitor "$LIVE"
+        # The privkey.pem under live/ is a symlink into archive/, so chown the
+        # whole CERTDIR tree (covers live/, archive/, renewal/, accounts/).
+        chown -R monitor:monitor "$CERTDIR"
+        # Lock down the real key file (chmod follows symlinks, so this hits archive/).
         chmod 640 "$LIVE/privkey.pem"
         export HTTPS_CERT="$LIVE/fullchain.pem"
         export HTTPS_KEY="$LIVE/privkey.pem"

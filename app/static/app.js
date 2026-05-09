@@ -219,7 +219,8 @@
       const streamList = $('plex-streams');
       streamList.innerHTML = '';
       if (!plex.available) {
-        streamList.innerHTML = '<div class="empty">plex unavailable</div>';
+        const msg = plex.error ? 'plex unavailable: ' + plex.error : 'plex unavailable';
+        streamList.innerHTML = '<div class="empty">' + msg + '</div>';
       } else if (!plex.sessions.length) {
         streamList.innerHTML = '<div class="empty">no active streams</div>';
       } else {

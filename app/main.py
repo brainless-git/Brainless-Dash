@@ -97,6 +97,14 @@ def minecraft_stats():
     return result
 
 
+@app.get("/api/minecraft/log")
+def minecraft_log():
+    result = stats.get_mc_log()
+    if result is None:
+        return JSONResponse({"error": "MC_LOG_PATH not configured"}, status_code=404)
+    return {"lines": result}
+
+
 @app.post("/api/minecraft/chat")
 async def minecraft_chat(request: Request):
     try:

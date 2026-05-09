@@ -391,9 +391,43 @@ body {
 }
 .mc-chat {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+.mc-chat-log {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  scroll-behavior: smooth;
+}
+.mc-chat-line {
+  display: flex;
+  gap: 6px;
+  line-height: 1.6;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.mc-chat-time { color: var(--text-dim); flex-shrink: 0; }
+.mc-chat-player { color: #4caf50; flex-shrink: 0; font-weight: 700; }
+.mc-chat-player-server { color: var(--text-dim); flex-shrink: 0; font-style: italic; }
+.mc-chat-msg { color: var(--text); word-break: break-word; flex: 1; }
+.mc-chat-status {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  min-height: 14px;
+}
+.mc-chat-status-err { color: var(--accent); }
+.mc-chat-row {
+  display: flex;
   gap: 8px;
   align-items: center;
-  margin-top: 2px;
 }
 .mc-chat-input {
   flex: 1;

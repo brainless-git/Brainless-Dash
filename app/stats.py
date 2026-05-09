@@ -159,7 +159,9 @@ def get_storage():
     unraid_mounts = []
     if mnt.is_dir():
         for child in sorted(mnt.iterdir()):
-            if child.name.startswith(("disk", "cache")) or child.name in ("user", "user0"):
+            # user and user0 are union-filesystem views of the whole array —
+            # including them alongside individual disks double-counts capacity.
+            if child.name.startswith(("disk", "cache")):
                 unraid_mounts.append(str(child))
 
     candidates = unraid_mounts or [

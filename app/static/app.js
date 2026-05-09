@@ -45,20 +45,17 @@
   function initCanvas() {
     const canvas = $('temp-canvas');
     if (!canvas) return;
-    // Use ResizeObserver so we only measure on actual layout changes
-    if (window.ResizeObserver) {
-      new ResizeObserver(entries => {
-        const w = Math.round(entries[0].contentRect.width);
-        if (w > 0 && w !== tempCanvasW) { tempCanvasW = w; canvas.width = w; }
-      }).observe(canvas);
-    } else {
-      window.addEventListener('resize', () => {
-        const w = canvas.offsetWidth;
-        if (w > 0 && w !== tempCanvasW) { tempCanvasW = w; canvas.width = w; }
-      });
+    function sync() {
+      const w = canvas.offsetWidth, h = canvas.offsetHeight;
+      if (w > 0 && w !== tempCanvasW)  { tempCanvasW = w; canvas.width  = w; }
+      if (h > 0 && h !== canvas.height) { canvas.height = h; }
     }
-    tempCanvasW = canvas.offsetWidth;
-    canvas.width = tempCanvasW;
+    if (window.ResizeObserver) {
+      new ResizeObserver(sync).observe(canvas);
+    } else {
+      window.addEventListener('resize', sync);
+    }
+    sync();
   }
 
   function drawTempGraph(sensors) {

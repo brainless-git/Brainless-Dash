@@ -412,14 +412,36 @@ body {
     padding: 16px;
     gap: 16px;
   }
-  #card-system, #card-resources, #card-temps, #card-plex, #card-sonarr { grid-column: 1 / -1; }
+  /* Span full width on tablet; overridden at desktop */
+  #card-system, #card-resources, #card-temps, #card-sonarr, #card-plex { grid-column: 1 / -1; }
   body { font-size: 14px; }
   .rate-value { font-size: 18px; }
 }
 
+/* Desktop — 3 columns, dense packing fills gaps automatically */
 @media (min-width: 1000px) {
   .content {
     grid-template-columns: repeat(3, 1fr);
+    grid-auto-flow: row dense;
   }
-  #card-system, #card-resources, #card-temps, #card-plex, #card-sonarr { grid-column: 1 / -1; }
+  /* Let system + resources sit in-row; only temps/sonarr/plex stay full-width */
+  #card-system, #card-resources { grid-column: auto; }
+  #card-temps, #card-sonarr, #card-plex { grid-column: 1 / -1; }
+  #temp-canvas { height: 180px; }
+}
+
+/* Wide desktop — 4 columns, cards pair up side-by-side */
+@media (min-width: 1400px) {
+  .content {
+    grid-template-columns: repeat(4, 1fr);
+    max-width: 1600px;
+    gap: 20px;
+    padding: 20px;
+  }
+  #card-system, #card-resources,
+  #card-storage, #card-network,
+  #card-sabnzbd, #card-qbittorrent { grid-column: span 2; }
+  #card-temps, #card-sonarr, #card-plex { grid-column: 1 / -1; }
+  .rate-value { font-size: 20px; }
+  #temp-canvas { height: 220px; }
 }

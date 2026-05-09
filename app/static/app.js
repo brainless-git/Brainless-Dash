@@ -288,6 +288,36 @@
       plexCard.style.display = 'none';
     }
 
+    // Minecraft
+    const mcCard = $('card-minecraft');
+    if (d.minecraft) {
+      mcCard.style.display = '';
+      const mc = d.minecraft;
+      if (!mc.online) {
+        $('mc-dot').className = 'dot dot-off';
+        $('mc-count').textContent = 'offline';
+        $('mc-motd').textContent = mc.error || 'server unreachable';
+        $('mc-players').innerHTML = '';
+        $('mc-chat').style.display = 'none';
+      } else {
+        $('mc-dot').className = 'dot dot-on';
+        $('mc-count').textContent = mc.players_online + ' / ' + mc.players_max + ' online';
+        $('mc-motd').textContent = mc.motd || mc.version || '';
+        if (mc.players.length) {
+          $('mc-players').innerHTML = mc.players
+            .map(p => '<span class="mc-player">' + p + '</span>').join('');
+        } else if (mc.players_online > 0) {
+          $('mc-players').innerHTML = '<span class="empty">' + mc.players_online +
+            ' player' + (mc.players_online !== 1 ? 's' : '') + ' online</span>';
+        } else {
+          $('mc-players').innerHTML = '<span class="empty">no players online</span>';
+        }
+        $('mc-chat').style.display = mc.rcon_enabled ? '' : 'none';
+      }
+    } else {
+      mcCard.style.display = 'none';
+    }
+
     // SABnzbd
     const sabnzbdCard = $('card-sabnzbd');
     if (d.sabnzbd) {
@@ -363,8 +393,42 @@
     }
   }
 
+  function initMcChat() {
+    const btn   = $('mc-chat-send');
+    const input = $('mc-chat-input');
+    if (!btn || !input) return;
+
+    async function send() {
+      const msg = input.value.trim();
+      if (!msg) return;
+      btn.disabled = true;
+      try {
+        const r = await fetch('/api/minecraft/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: msg }),
+        });
+        if (r.ok) {
+          input.value = '';
+        } else {
+          const err = await r.json().catch(() => ({}));
+          console.error('MC chat error:', err.error || r.status);
+        }
+      } catch (e) {
+        console.error('MC chat error:', e);
+      } finally {
+        btn.disabled = false;
+        input.focus();
+      }
+    }
+
+    btn.addEventListener('click', send);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  }
+
   async function init() {
     initCanvas();
+    initMcChat();
     try {
       const r = await fetch('/api/config', { cache: 'no-store' });
       if (r.ok) {

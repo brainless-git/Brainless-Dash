@@ -160,6 +160,32 @@
     </div>
   </section>
 
+  <section class="card" id="card-minecraft" style="display:none">
+    <div class="card-head">
+      <div class="card-title">
+        <svg class="card-logo" viewBox="0 0 16 16" aria-hidden="true">
+          <rect width="16" height="16" rx="2.5" fill="#4CAF50"/>
+          <rect x="2" y="3" width="5" height="4" fill="#1e3d1e"/>
+          <rect x="9" y="3" width="5" height="4" fill="#1e3d1e"/>
+          <rect x="5" y="8" width="6" height="2" fill="#1e3d1e"/>
+          <rect x="3" y="10" width="4" height="4" fill="#1e3d1e"/>
+          <rect x="9" y="10" width="4" height="4" fill="#1e3d1e"/>
+        </svg>
+        <h2>Minecraft</h2>
+      </div>
+      <span class="meta" id="mc-count">—</span>
+    </div>
+    <div class="mc-status-row">
+      <span id="mc-dot" class="dot dot-off"></span>
+      <span id="mc-motd" class="mc-motd">—</span>
+    </div>
+    <div class="mc-players" id="mc-players"></div>
+    <div class="mc-chat" id="mc-chat" style="display:none">
+      <input type="text" id="mc-chat-input" class="mc-chat-input" placeholder="Send a message to the server…" maxlength="100">
+      <button type="button" id="mc-chat-send" class="mc-chat-btn">Send</button>
+    </div>
+  </section>
+
   <section class="card" id="card-sonarr" style="display:none">
     <div class="card-head">
       <div class="card-title">

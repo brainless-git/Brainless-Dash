@@ -2,7 +2,10 @@
 import json
 import logging
 import os
+import re
+import socket
 import ssl
+import struct
 import threading
 import time
 import urllib.error
@@ -26,6 +29,10 @@ _QB_URL      = os.environ.get("QB_URL",      "http://localhost:8080").rstrip("/"
 _QB_USERNAME = os.environ.get("QB_USERNAME", "admin")
 _QB_PASSWORD = os.environ.get("QB_PASSWORD", "")
 _QB_API_KEY  = os.environ.get("QB_API_KEY",  "")
+_MC_HOST          = os.environ.get("MC_HOST",          "")
+_MC_PORT          = int(os.environ.get("MC_PORT",          "25565"))
+_MC_RCON_PORT     = int(os.environ.get("MC_RCON_PORT",     "25575"))
+_MC_RCON_PASSWORD = os.environ.get("MC_RCON_PASSWORD", "")
 
 # ── Values that never change: computed once at startup ─────────────────────────
 try:
@@ -509,6 +516,160 @@ if _QB_API_KEY or _QB_PASSWORD:
     threading.Thread(target=_qb_worker, daemon=True, name="qb-poller").start()
 
 
+# ── Minecraft server status ────────────────────────────────────────────────────
+
+_mc_lock   = threading.Lock()
+_mc_result = None
+
+
+def _mc_varint(n):
+    """Encode a non-negative integer as a Minecraft protocol varint."""
+    b = b''
+    n &= 0xFFFFFFFF
+    while True:
+        part = n & 0x7F
+        n >>= 7
+        b += bytes([part | (0x80 if n else 0)])
+        if not n:
+            return b
+
+
+def _mc_read_varint(data, pos):
+    n, shift = 0, 0
+    while pos < len(data):
+        byte = data[pos]; pos += 1
+        n |= (byte & 0x7F) << shift
+        shift += 7
+        if not (byte & 0x80):
+            return n, pos
+    raise ValueError("varint truncated")
+
+
+def _mc_recv_all(sock, n):
+    buf = b''
+    while len(buf) < n:
+        chunk = sock.recv(n - len(buf))
+        if not chunk:
+            raise EOFError("connection closed")
+        buf += chunk
+    return buf
+
+
+def _mc_motd(desc):
+    """Extract plain text from a Minecraft description field."""
+    if isinstance(desc, str):
+        text = desc
+    elif isinstance(desc, dict):
+        text = desc.get("text", "")
+        for extra in desc.get("extra", []):
+            if isinstance(extra, dict):
+                text += extra.get("text", "")
+            elif isinstance(extra, str):
+                text += extra
+    else:
+        return ""
+    return re.sub(r'§.', '', text).strip()
+
+
+def _fetch_minecraft():
+    try:
+        with socket.create_connection((_MC_HOST, _MC_PORT), timeout=3) as s:
+            host_b = _MC_HOST.encode('utf-8')
+            payload = (
+                _mc_varint(0x00) +
+                _mc_varint(0) +
+                _mc_varint(len(host_b)) + host_b +
+                struct.pack('>H', _MC_PORT) +
+                _mc_varint(1)
+            )
+            s.sendall(_mc_varint(len(payload)) + payload)
+            s.sendall(b'\x01\x00')
+
+            # Read response length varint byte by byte
+            length, shift = 0, 0
+            while True:
+                byte = s.recv(1)
+                if not byte:
+                    raise EOFError("connection closed")
+                b = byte[0]
+                length |= (b & 0x7F) << shift
+                shift += 7
+                if not (b & 0x80):
+                    break
+
+            pkt = _mc_recv_all(s, length)
+            _, pos = _mc_read_varint(pkt, 0)          # skip packet ID
+            str_len, pos = _mc_read_varint(pkt, pos)
+            status = json.loads(pkt[pos:pos + str_len])
+    except Exception as exc:
+        log.debug("Minecraft ping failed: %s", exc)
+        return {"online": False, "error": str(exc)}
+
+    players  = status.get("players", {})
+    sample   = players.get("sample") or []
+    return {
+        "online":         True,
+        "version":        status.get("version", {}).get("name", ""),
+        "motd":           _mc_motd(status.get("description", "")),
+        "players_online": players.get("online", 0),
+        "players_max":    players.get("max", 0),
+        "players":        [p["name"] for p in sample if "name" in p],
+        "rcon_enabled":   bool(_MC_RCON_PASSWORD),
+    }
+
+
+def _mc_worker():
+    global _mc_result
+    while True:
+        result = _fetch_minecraft()
+        with _mc_lock:
+            _mc_result = result
+        time.sleep(30)
+
+
+def get_minecraft():
+    if not _MC_HOST:
+        return None
+    with _mc_lock:
+        return _mc_result
+
+
+def send_mc_chat(message):
+    """Send a message to the server via RCON. Returns (ok, error_str)."""
+    if not _MC_RCON_PASSWORD:
+        return False, "RCON not configured"
+    try:
+        with socket.create_connection((_MC_HOST, _MC_RCON_PORT), timeout=5) as s:
+            def _recv_exact(n):
+                d = b''
+                while len(d) < n:
+                    chunk = s.recv(n - len(d))
+                    if not chunk:
+                        raise EOFError("connection closed")
+                    d += chunk
+                return d
+
+            def _rcon(req_id, ptype, body):
+                body_b = body.encode('utf-8') + b'\x00\x00'
+                s.sendall(struct.pack('<iii', len(body_b) + 8, req_id, ptype) + body_b)
+                length  = struct.unpack('<i', _recv_exact(4))[0]
+                payload = _recv_exact(length)
+                return struct.unpack('<i', payload[:4])[0]
+
+            resp_id = _rcon(1, 3, _MC_RCON_PASSWORD)
+            if resp_id == -1:
+                return False, "RCON authentication failed — check MC_RCON_PASSWORD"
+            _rcon(2, 2, f"say {message}")
+            return True, None
+    except Exception as exc:
+        log.warning("RCON error: %s", exc)
+        return False, str(exc)
+
+
+if _MC_HOST:
+    threading.Thread(target=_mc_worker, daemon=True, name="mc-poller").start()
+
+
 # ── Aggregator ─────────────────────────────────────────────────────────────────
 
 def collect_all():
@@ -534,4 +695,7 @@ def collect_all():
     qb = get_qbittorrent()
     if qb is not None:
         result["qbittorrent"] = qb
+    mc = get_minecraft()
+    if mc is not None:
+        result["minecraft"] = mc
     return result

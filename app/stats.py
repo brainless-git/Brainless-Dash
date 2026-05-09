@@ -1,12 +1,30 @@
 """System statistics collection for Unraid monitoring."""
+import json
 import os
 import time
+import urllib.error
+import urllib.request
 import psutil
 from pathlib import Path
 
 
 # Cache for network rate calculation
 _net_cache = {"time": None, "bytes_sent": 0, "bytes_recv": 0}
+
+# Plex config
+_PLEX_URL = os.environ.get("PLEX_URL", "http://localhost:32400").rstrip("/")
+_PLEX_TOKEN = os.environ.get("PLEX_TOKEN", "")
+
+# Chips that expose CPU temperatures
+_CPU_CHIPS = {"k10temp", "coretemp", "zenpower"}
+
+# Preferred representative labels, checked in order (lowercase)
+_CPU_PACKAGE_PRIORITY = [
+    "tctl", "tdie",                          # AMD k10temp / zenpower
+    "package id 0", "package id 1",          # Intel coretemp
+    "physical id 0", "physical id 1",        # Intel older kernels
+    "cpu temperature", "cpu",
+]
 
 
 def get_cpu():
@@ -45,26 +63,52 @@ def get_memory():
     }
 
 
+def _best_cpu_temp(entries):
+    valid = [e for e in entries if e.current is not None]
+    if not valid:
+        return None
+    by_label = {e.label.strip().lower(): e for e in valid}
+    for key in _CPU_PACKAGE_PRIORITY:
+        if key in by_label:
+            return by_label[key]
+    return max(valid, key=lambda e: e.current)
+
+
 def get_temps():
-    """Return temperature sensors. Requires /sys to be mounted in the container."""
+    """Return temperature sensors. CPU chips are consolidated to one representative reading."""
     sensors = []
     try:
         temps = psutil.sensors_temperatures()
     except (AttributeError, OSError):
         return sensors
 
+    cpu_entry = None
     for chip, entries in temps.items():
-        for entry in entries:
-            if entry.current is None:
-                continue
-            label = entry.label or chip
-            sensors.append({
-                "chip": chip,
-                "label": label,
-                "current": round(entry.current, 1),
-                "high": entry.high,
-                "critical": entry.critical,
-            })
+        if chip.lower() in _CPU_CHIPS:
+            if cpu_entry is None:
+                best = _best_cpu_temp(entries)
+                if best is not None:
+                    cpu_entry = {
+                        "chip": chip,
+                        "label": "CPU",
+                        "current": round(best.current, 1),
+                        "high": best.high,
+                        "critical": best.critical,
+                    }
+        else:
+            for entry in entries:
+                if entry.current is None:
+                    continue
+                sensors.append({
+                    "chip": chip,
+                    "label": entry.label or chip,
+                    "current": round(entry.current, 1),
+                    "high": entry.high,
+                    "critical": entry.critical,
+                })
+
+    if cpu_entry:
+        sensors.insert(0, cpu_entry)
     return sensors
 
 
@@ -168,6 +212,40 @@ def get_network():
     }
 
 
+def get_plex_sessions():
+    """Return active Plex streams, or None if PLEX_TOKEN is not configured."""
+    if not _PLEX_TOKEN:
+        return None
+    req = urllib.request.Request(
+        f"{_PLEX_URL}/status/sessions",
+        headers={"X-Plex-Token": _PLEX_TOKEN, "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read())
+    except Exception:
+        return {"available": False, "stream_count": 0, "sessions": []}
+
+    container = data.get("MediaContainer", {})
+    sessions = []
+    for item in container.get("Metadata") or []:
+        media_type = item.get("type", "")
+        view_offset = item.get("viewOffset") or 0
+        duration = item.get("duration") or 0
+        progress = round(view_offset / duration * 100, 1) if duration else 0
+        sessions.append({
+            "title": item.get("title", ""),
+            "show": item.get("grandparentTitle") if media_type == "episode" else None,
+            "type": media_type,
+            "user": (item.get("User") or {}).get("title", "unknown"),
+            "player": (item.get("Player") or {}).get("title", ""),
+            "state": (item.get("Player") or {}).get("state", ""),
+            "transcoding": "TranscodeSession" in item,
+            "progress_pct": progress,
+        })
+    return {"available": True, "stream_count": len(sessions), "sessions": sessions}
+
+
 def get_uptime():
     return int(time.time() - psutil.boot_time())
 
@@ -182,7 +260,7 @@ def get_hostname():
 
 def collect_all():
     """Collect every metric in a single payload."""
-    return {
+    result = {
         "timestamp": int(time.time()),
         "hostname": get_hostname(),
         "uptime": get_uptime(),
@@ -192,3 +270,7 @@ def collect_all():
         "storage": get_storage(),
         "network": get_network(),
     }
+    plex = get_plex_sessions()
+    if plex is not None:
+        result["plex"] = plex
+    return result

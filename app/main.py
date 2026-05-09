@@ -57,5 +57,13 @@ def network_stats():
     return stats.get_network()
 
 
+@app.get("/api/plex")
+def plex_stats():
+    result = stats.get_plex_sessions()
+    if result is None:
+        return JSONResponse({"error": "PLEX_TOKEN not configured"}, status_code=404)
+    return result
+
+
 # Serve static frontend from root
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

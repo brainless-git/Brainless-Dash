@@ -16,6 +16,8 @@ services:
       - /mnt:/mnt:ro
     environment:
       - TZ=Australia/Sydney
-      - PORT=8080
+      - PORT=8090
       - REFRESH_MS=2000
       - LOG_LEVEL=info
+      - PLEX_URL=http://localhost:32400
+      - PLEX_TOKEN=

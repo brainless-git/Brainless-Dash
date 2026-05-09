@@ -290,6 +290,41 @@ body {
   font-style: italic;
 }
 
+/* Plex streams */
+.plex-streams {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plex-session {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  padding: 10px;
+}
+.plex-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plex-paused { color: var(--text-faint); font-weight: 400; }
+.plex-meta {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-bottom: 6px;
+  gap: 8px;
+}
+.plex-transcode { color: var(--warn); }
+.plex-direct { color: var(--ok); }
+
 /* Footer */
 .footer {
   display: flex;
@@ -308,7 +343,7 @@ body {
     padding: 16px;
     gap: 16px;
   }
-  #card-system, #card-cpu { grid-column: 1 / -1; }
+  #card-system, #card-cpu, #card-plex { grid-column: 1 / -1; }
   body { font-size: 14px; }
 }
 
@@ -316,6 +351,5 @@ body {
   .content {
     grid-template-columns: repeat(3, 1fr);
   }
-  #card-system { grid-column: 1 / -1; }
-  #card-cpu { grid-column: 1 / -1; }
+  #card-system, #card-cpu, #card-plex { grid-column: 1 / -1; }
 }

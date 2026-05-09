@@ -316,7 +316,12 @@
         } else {
           $('mc-players').innerHTML = '<span class="empty">no players online</span>';
         }
-        $('mc-chat').style.display = mc.rcon_enabled ? '' : 'none';
+        const chatEl = $('mc-chat');
+        chatEl.style.display = (mc.rcon_enabled || mc.log_enabled) ? '' : 'none';
+        const logEl = $('mc-chat-log');
+        if (logEl) logEl.style.display = mc.log_enabled ? '' : 'none';
+        const rowEl = chatEl.querySelector('.mc-chat-row');
+        if (rowEl) rowEl.style.display = mc.rcon_enabled ? '' : 'none';
       }
     } else {
       mcCard.style.display = 'none';
@@ -397,15 +402,51 @@
     }
   }
 
+  let _mcLogCount = -1;
+
+  async function mcLogTick() {
+    try {
+      const r = await fetch('/api/minecraft/log', { cache: 'no-store' });
+      if (!r.ok) return;
+      const data = await r.json();
+      const lines = data.lines || [];
+      if (lines.length === _mcLogCount) return;
+      _mcLogCount = lines.length;
+      const logEl = $('mc-chat-log');
+      if (!logEl) return;
+      const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30;
+      logEl.innerHTML = lines.length === 0
+        ? '<div class="mc-chat-time">no chat yet</div>'
+        : lines.map(l => {
+            const isServer = l.player === '[Server]';
+            return '<div class="mc-chat-line">' +
+              '<span class="mc-chat-time">' + esc(l.time) + '</span>' +
+              '<span class="' + (isServer ? 'mc-chat-player-server' : 'mc-chat-player') + '">' + esc(l.player) + '</span>' +
+              '<span class="mc-chat-msg">' + esc(l.msg) + '</span>' +
+              '</div>';
+          }).join('');
+      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+    } catch (e) { /* silent */ }
+  }
+
   function initMcChat() {
-    const btn   = $('mc-chat-send');
-    const input = $('mc-chat-input');
+    const btn    = $('mc-chat-send');
+    const input  = $('mc-chat-input');
+    const status = $('mc-chat-status');
     if (!btn || !input) return;
+
+    function setStatus(msg, isErr) {
+      if (!status) return;
+      status.textContent = msg;
+      status.className = 'mc-chat-status' + (isErr ? ' mc-chat-status-err' : '');
+      if (msg) setTimeout(() => { if (status.textContent === msg) status.textContent = ''; }, 3000);
+    }
 
     async function send() {
       const msg = input.value.trim();
       if (!msg) return;
       btn.disabled = true;
+      setStatus('Sending…', false);
       try {
         const r = await fetch('/api/minecraft/chat', {
           method: 'POST',
@@ -414,12 +455,14 @@
         });
         if (r.ok) {
           input.value = '';
+          setStatus('Sent', false);
+          mcLogTick();
         } else {
           const err = await r.json().catch(() => ({}));
-          console.error('MC chat error:', err.error || r.status);
+          setStatus(err.error || 'send failed', true);
         }
       } catch (e) {
-        console.error('MC chat error:', e);
+        setStatus('connection error', true);
       } finally {
         btn.disabled = false;
         input.focus();
@@ -442,6 +485,8 @@
     } catch (e) { /* use default */ }
     tick();
     setInterval(tick, REFRESH_MS);
+    mcLogTick();
+    setInterval(mcLogTick, REFRESH_MS);
   }
 
   init();

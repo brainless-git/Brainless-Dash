@@ -7,9 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /srv
 
-# gcc is only needed to compile psutil; bash is needed by entrypoint.sh; certbot is kept for ACME cert management
+# gcc is only needed to compile psutil; bash+gosu needed by entrypoint.sh; certbot is kept for ACME cert management
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc bash \
+    && apt-get install -y --no-install-recommends gcc bash gosu \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -48,6 +48,7 @@ ENV PORT=8090 \
     MC_PORT=25565 \
     MC_RCON_PORT=25575 \
     MC_RCON_PASSWORD= \
+    MC_LOG_PATH= \
     HTTPS_CERT= \
     HTTPS_KEY= \
     ACME_DOMAIN= \
@@ -56,13 +57,12 @@ ENV PORT=8090 \
     ACME_DNS_CREDENTIALS= \
     ACME_CHALLENGE_PORT=8180
 
-# Run as non-root. /data/certs is owned by monitor so certbot can write there.
+# Entrypoint runs as root so it can write to host-mounted volumes (e.g. /data/certs),
+# then drops to monitor (UID 1001) via gosu before exec'ing uvicorn.
 RUN useradd -r -u 1001 monitor \
     && chown -R monitor:monitor /srv \
     && chmod +x /entrypoint.sh \
-    && mkdir -p /data/certs \
-    && chown -R monitor:monitor /data
-USER monitor
+    && mkdir -p /data/certs
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "\

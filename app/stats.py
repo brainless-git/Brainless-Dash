@@ -38,6 +38,11 @@ _MC_HOST          = os.environ.get("MC_HOST",          "")
 _MC_PORT          = int(os.environ.get("MC_PORT",          "25565"))
 _MC_RCON_PORT     = int(os.environ.get("MC_RCON_PORT",     "25575"))
 _MC_RCON_PASSWORD = os.environ.get("MC_RCON_PASSWORD", "")
+_MC_LOG_PATH      = os.environ.get("MC_LOG_PATH",      "")
+
+# Matches vanilla/Paper/Spigot chat and server-say lines in latest.log
+_MC_CHAT_RE  = re.compile(r'^\[(\d{2}:\d{2}:\d{2})\] \[Server thread/INFO\](?:\[.*?\])?: <([^>]+)> (.+)$')
+_MC_SERVER_RE = re.compile(r'^\[(\d{2}:\d{2}:\d{2})\] \[Server thread/INFO\](?:\[.*?\])?: \[Server\] (.+)$')
 
 
 def _check_service_url(name, url):
@@ -617,7 +622,7 @@ def _fetch_minecraft():
             status = json.loads(pkt[pos:pos + str_len])
     except Exception as exc:
         log.debug("Minecraft ping failed: %s", exc)
-        return {"online": False, "error": "server unreachable"}
+        return {"online": False, "error": "server unreachable", "log_enabled": bool(_MC_LOG_PATH)}
 
     players  = status.get("players", {})
     sample   = players.get("sample") or []
@@ -629,6 +634,7 @@ def _fetch_minecraft():
         "players_max":    players.get("max", 0),
         "players":        [p["name"] for p in sample if "name" in p],
         "rcon_enabled":   bool(_MC_RCON_PASSWORD),
+        "log_enabled":    bool(_MC_LOG_PATH),
     }
 
 
@@ -670,14 +676,26 @@ def send_mc_chat(message):
             def _rcon(req_id, ptype, body):
                 body_b = body.encode('utf-8') + b'\x00\x00'
                 s.sendall(struct.pack('<iii', len(body_b) + 8, req_id, ptype) + body_b)
-                length  = struct.unpack('<i', _recv_exact(4))[0]
-                payload = _recv_exact(length)
-                return struct.unpack('<i', payload[:4])[0]
+                # Some servers (Paper, Spigot) send extra packets before the real response.
+                # Try up to 3 reads to find the packet whose ID matches what we sent.
+                for _ in range(3):
+                    length = struct.unpack('<i', _recv_exact(4))[0]
+                    if not (10 <= length <= 4096):
+                        raise ValueError(f"RCON: unexpected response length {length}")
+                    payload = _recv_exact(length)
+                    resp_id  = struct.unpack('<i', payload[:4])[0]
+                    resp_body = payload[8:].rstrip(b'\x00').decode('utf-8', errors='replace')
+                    if resp_id == -1 or resp_id == req_id:
+                        return resp_id, resp_body
+                    log.debug("RCON: discarding stale packet id=%d (waiting for %d)", resp_id, req_id)
+                raise ValueError("RCON: no matching response after 3 packets")
 
-            resp_id = _rcon(1, 3, _MC_RCON_PASSWORD)
+            resp_id, _ = _rcon(1, 3, _MC_RCON_PASSWORD)
             if resp_id == -1:
                 return False, "RCON authentication failed — check MC_RCON_PASSWORD"
-            _rcon(2, 2, f"say {message}")
+            _, resp_body = _rcon(2, 2, f"say {message}")
+            if resp_body:
+                log.debug("RCON say response: %r", resp_body)
             return True, None
     except Exception as exc:
         log.warning("RCON error: %s", exc)
@@ -686,6 +704,34 @@ def send_mc_chat(message):
 
 if _MC_HOST:
     threading.Thread(target=_mc_worker, daemon=True, name="mc-poller").start()
+
+
+def get_mc_log():
+    """Return recent chat lines from the Minecraft server log file (last 50 entries)."""
+    if not _MC_LOG_PATH:
+        return None
+    path = Path(_MC_LOG_PATH)
+    if not path.exists():
+        return []
+    try:
+        with open(path, 'rb') as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 65536))
+            raw = f.read().decode('utf-8', errors='replace').splitlines()
+        lines = []
+        for line in raw[-300:]:
+            m = _MC_CHAT_RE.match(line)
+            if m:
+                lines.append({"time": m.group(1), "player": m.group(2), "msg": m.group(3)})
+                continue
+            m = _MC_SERVER_RE.match(line)
+            if m:
+                lines.append({"time": m.group(1), "player": "[Server]", "msg": m.group(2)})
+        return lines[-50:]
+    except OSError as exc:
+        log.warning("MC log read error: %s", exc)
+        return []
 
 
 # ── ACME auto-renewal ──────────────────────────────────────────────────────────

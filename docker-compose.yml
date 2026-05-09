@@ -6,14 +6,16 @@ services:
     # Host network gives accurate per-interface bandwidth on the host NICs.
     # If you prefer bridged networking, comment network_mode and add:
     #   ports:
-    #     - "8080:8080"
+    #     - "8090:8090"
+    #     - "8180:8180"   # ACME HTTP-01 challenge port (forward port 80 here)
     network_mode: host
     pid: host
-    # Read-only mounts so the container can read host metrics without write access.
+    # Read-only mounts for host metrics; rw mount for ACME cert storage.
     volumes:
       - /sys:/sys:ro
       - /proc:/proc:ro
       - /mnt:/mnt:ro
+      - /mnt/user/appdata/brainless-dash/certs:/data/certs
     environment:
       - TZ=Australia/Sydney
       - PORT=8090
@@ -33,5 +35,17 @@ services:
       - MC_PORT=25565
       - MC_RCON_PORT=25575
       - MC_RCON_PASSWORD=
+      # Manual cert paths (skip if using ACME_DOMAIN below)
       - HTTPS_CERT=
       - HTTPS_KEY=
+      # Automatic Let's Encrypt — set ACME_DOMAIN + ACME_EMAIL to enable.
+      # DNS-01 challenge (recommended — no port forwarding needed):
+      #   Set ACME_DNS_PLUGIN to: cloudflare | digitalocean | duckdns
+      #   Set ACME_DNS_CREDENTIALS to the path of your credentials file inside the container.
+      #   Mount the credentials file: - /path/to/cloudflare.ini:/data/certs/cloudflare.ini:ro
+      # HTTP-01 challenge (fallback): forward port 80 on your router to host:ACME_CHALLENGE_PORT.
+      - ACME_DOMAIN=
+      - ACME_EMAIL=
+      - ACME_DNS_PLUGIN=
+      - ACME_DNS_CREDENTIALS=
+      - ACME_CHALLENGE_PORT=8180

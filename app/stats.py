@@ -3,9 +3,11 @@ import json
 import logging
 import os
 import re
+import signal
 import socket
 import ssl
 import struct
+import subprocess
 import threading
 import time
 import urllib.error
@@ -29,6 +31,10 @@ _QB_URL      = os.environ.get("QB_URL",      "http://localhost:8080").rstrip("/"
 _QB_USERNAME = os.environ.get("QB_USERNAME", "admin")
 _QB_PASSWORD = os.environ.get("QB_PASSWORD", "")
 _QB_API_KEY  = os.environ.get("QB_API_KEY",  "")
+_ACME_DOMAIN         = os.environ.get("ACME_DOMAIN",         "")
+_ACME_CHALLENGE_PORT = os.environ.get("ACME_CHALLENGE_PORT", "8180")
+_ACME_CERTDIR        = "/data/certs"
+
 _MC_HOST          = os.environ.get("MC_HOST",          "")
 _MC_PORT          = int(os.environ.get("MC_PORT",          "25565"))
 _MC_RCON_PORT     = int(os.environ.get("MC_RCON_PORT",     "25575"))
@@ -668,6 +674,40 @@ def send_mc_chat(message):
 
 if _MC_HOST:
     threading.Thread(target=_mc_worker, daemon=True, name="mc-poller").start()
+
+
+# ── ACME auto-renewal ──────────────────────────────────────────────────────────
+
+def _acme_renewal_worker():
+    """Check weekly; renew cert if needed; restart process so uvicorn loads new cert."""
+    cert_path = f"{_ACME_CERTDIR}/live/{_ACME_DOMAIN}/fullchain.pem"
+    while True:
+        time.sleep(86400 * 7)  # check every 7 days
+        try:
+            mtime_before = Path(cert_path).stat().st_mtime if Path(cert_path).exists() else 0
+            result = subprocess.run(
+                [
+                    "certbot", "renew",
+                    "--config-dir", _ACME_CERTDIR,
+                    "--work-dir",   "/tmp/certbot/work",
+                    "--logs-dir",   "/tmp/certbot/logs",
+                    "--non-interactive", "--quiet",
+                ],
+                capture_output=True, text=True, timeout=120,
+            )
+            if result.returncode != 0:
+                log.warning("certbot renew failed: %s", result.stderr.strip())
+                continue
+            mtime_after = Path(cert_path).stat().st_mtime if Path(cert_path).exists() else 0
+            if mtime_after > mtime_before:
+                log.info("Certificate renewed — restarting to apply new cert")
+                os.kill(os.getpid(), signal.SIGTERM)
+        except Exception as exc:
+            log.warning("ACME renewal error: %s", exc)
+
+
+if _ACME_DOMAIN:
+    threading.Thread(target=_acme_renewal_worker, daemon=True, name="acme-renewal").start()
 
 
 # ── Aggregator ─────────────────────────────────────────────────────────────────

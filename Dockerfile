@@ -32,7 +32,8 @@ ENV PORT=8090 \
     SABNZBD_API_KEY= \
     QB_URL=http://localhost:8080 \
     QB_USERNAME=admin \
-    QB_PASSWORD=
+    QB_PASSWORD= \
+    QB_API_KEY=
 
 # Run as non-root for safety. Mounts /sys and /proc remain readable.
 RUN useradd -r -u 1001 monitor && chown -R monitor:monitor /srv

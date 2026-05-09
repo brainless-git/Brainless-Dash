@@ -28,3 +28,4 @@ services:
       - QB_URL=http://localhost:8080
       - QB_USERNAME=admin
       - QB_PASSWORD=
+      - QB_API_KEY=

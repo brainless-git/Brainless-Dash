@@ -25,6 +25,7 @@ _SABNZBD_API_KEY = os.environ.get("SABNZBD_API_KEY", "")
 _QB_URL      = os.environ.get("QB_URL",      "http://localhost:8080").rstrip("/")
 _QB_USERNAME = os.environ.get("QB_USERNAME", "admin")
 _QB_PASSWORD = os.environ.get("QB_PASSWORD", "")
+_QB_API_KEY  = os.environ.get("QB_API_KEY",  "")
 
 # ── Values that never change: computed once at startup ─────────────────────────
 try:
@@ -410,10 +411,17 @@ if _SABNZBD_API_KEY:
 
 _qb_lock   = threading.Lock()
 _qb_result = None
-_qb_sid    = ""
+_qb_sid    = ""  # used only when falling back to username/password auth
 
 _QB_DL_STATES   = {"downloading", "stalledDL", "queuedDL", "checkingDL", "forcedDL", "metaDL", "allocating"}
 _QB_SEED_STATES = {"uploading", "seeding", "stalledUP", "queuedUP", "checkingUP", "forcedUP"}
+
+
+def _qb_headers():
+    """Return auth headers. API key (qBittorrent 5+) takes priority over SID cookie."""
+    if _QB_API_KEY:
+        return {"Authorization": f"Bearer {_QB_API_KEY}"}
+    return {"Cookie": f"SID={_qb_sid}"}
 
 
 def _qb_login():
@@ -436,27 +444,25 @@ def _qb_login():
 
 
 def _qb_get(path):
-    req = urllib.request.Request(
-        f"{_QB_URL}{path}", headers={"Cookie": f"SID={_qb_sid}"}
-    )
+    req = urllib.request.Request(f"{_QB_URL}{path}", headers=_qb_headers())
     with urllib.request.urlopen(req, timeout=5) as resp:
         return json.loads(resp.read())
 
 
 def _fetch_qbittorrent():
     global _qb_sid
-    if not _qb_sid and not _qb_login():
+    # Cookie-based auth needs a valid SID before the first request.
+    if not _QB_API_KEY and not _qb_sid and not _qb_login():
         return {"available": False, "error": "authentication failed"}
 
     def _attempt():
-        transfer  = _qb_get("/api/v2/transfer/info")
-        torrents  = _qb_get("/api/v2/torrents/info")
-        return transfer, torrents
+        return _qb_get("/api/v2/transfer/info"), _qb_get("/api/v2/torrents/info")
 
     try:
         transfer, torrents = _attempt()
     except urllib.error.HTTPError as exc:
-        if exc.code in (401, 403):
+        if exc.code in (401, 403) and not _QB_API_KEY:
+            # SID expired — re-authenticate once
             _qb_sid = ""
             if not _qb_login():
                 return {"available": False, "error": "authentication failed"}
@@ -491,13 +497,13 @@ def _qb_worker():
 
 
 def get_qbittorrent():
-    if not _QB_PASSWORD:
+    if not _QB_API_KEY and not _QB_PASSWORD:
         return None
     with _qb_lock:
         return _qb_result
 
 
-if _QB_PASSWORD:
+if _QB_API_KEY or _QB_PASSWORD:
     threading.Thread(target=_qb_worker, daemon=True, name="qb-poller").start()
 
 

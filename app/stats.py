@@ -5,6 +5,8 @@ import os
 import ssl
 import threading
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 import psutil
@@ -18,6 +20,11 @@ _PLEX_URL   = os.environ.get("PLEX_URL",   "http://localhost:32400").rstrip("/")
 _PLEX_TOKEN = os.environ.get("PLEX_TOKEN", "")
 _SONARR_URL     = os.environ.get("SONARR_URL",     "http://localhost:8989").rstrip("/")
 _SONARR_API_KEY = os.environ.get("SONARR_API_KEY", "")
+_SABNZBD_URL     = os.environ.get("SABNZBD_URL",     "http://localhost:8080").rstrip("/")
+_SABNZBD_API_KEY = os.environ.get("SABNZBD_API_KEY", "")
+_QB_URL      = os.environ.get("QB_URL",      "http://localhost:8080").rstrip("/")
+_QB_USERNAME = os.environ.get("QB_USERNAME", "admin")
+_QB_PASSWORD = os.environ.get("QB_PASSWORD", "")
 
 # ── Values that never change: computed once at startup ─────────────────────────
 try:
@@ -342,6 +349,158 @@ if _SONARR_API_KEY:
     threading.Thread(target=_sonarr_worker, daemon=True, name="sonarr-poller").start()
 
 
+# ── SABnzbd (background-polled, non-blocking) ─────────────────────────────────
+
+_sabnzbd_lock   = threading.Lock()
+_sabnzbd_result = None
+
+
+def _fetch_sabnzbd():
+    url = (
+        f"{_SABNZBD_URL}/api"
+        f"?mode=queue&output=json&apikey={_SABNZBD_API_KEY}"
+    )
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url), timeout=5) as resp:
+            data = json.loads(resp.read())
+    except Exception as exc:
+        log.warning("SABnzbd request failed: %s", exc)
+        return {"available": False, "error": str(exc)}
+
+    q = data.get("queue", {})
+    slots = q.get("slots", [])
+    return {
+        "available":   True,
+        "status":      q.get("status", "Unknown"),
+        "speed":       q.get("speed", "0"),       # formatted string e.g. "1.23 MB"
+        "size_left":   q.get("sizeleft", "0 B"),  # formatted string
+        "queue_count": int(q.get("noofslots", 0)),
+        "slots": [
+            {
+                "filename": s.get("filename", ""),
+                "status":   s.get("status", ""),
+                "percent":  float(s.get("percentage", 0)),
+            }
+            for s in slots[:5]
+        ],
+    }
+
+
+def _sabnzbd_worker():
+    global _sabnzbd_result
+    while True:
+        result = _fetch_sabnzbd()
+        with _sabnzbd_lock:
+            _sabnzbd_result = result
+        time.sleep(10)
+
+
+def get_sabnzbd():
+    if not _SABNZBD_API_KEY:
+        return None
+    with _sabnzbd_lock:
+        return _sabnzbd_result
+
+
+if _SABNZBD_API_KEY:
+    threading.Thread(target=_sabnzbd_worker, daemon=True, name="sabnzbd-poller").start()
+
+
+# ── qBittorrent (background-polled, non-blocking) ──────────────────────────────
+
+_qb_lock   = threading.Lock()
+_qb_result = None
+_qb_sid    = ""
+
+_QB_DL_STATES   = {"downloading", "stalledDL", "queuedDL", "checkingDL", "forcedDL", "metaDL", "allocating"}
+_QB_SEED_STATES = {"uploading", "seeding", "stalledUP", "queuedUP", "checkingUP", "forcedUP"}
+
+
+def _qb_login():
+    global _qb_sid
+    data = urllib.parse.urlencode({"username": _QB_USERNAME, "password": _QB_PASSWORD}).encode()
+    req  = urllib.request.Request(
+        f"{_QB_URL}/api/v2/auth/login", data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.read().decode().strip() == "Ok.":
+                for name, val in resp.headers.items():
+                    if name.lower() == "set-cookie" and "SID=" in val:
+                        _qb_sid = val.split("SID=")[1].split(";")[0]
+                        return True
+    except Exception as exc:
+        log.warning("qBittorrent login failed: %s", exc)
+    return False
+
+
+def _qb_get(path):
+    req = urllib.request.Request(
+        f"{_QB_URL}{path}", headers={"Cookie": f"SID={_qb_sid}"}
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        return json.loads(resp.read())
+
+
+def _fetch_qbittorrent():
+    global _qb_sid
+    if not _qb_sid and not _qb_login():
+        return {"available": False, "error": "authentication failed"}
+
+    def _attempt():
+        transfer  = _qb_get("/api/v2/transfer/info")
+        torrents  = _qb_get("/api/v2/torrents/info")
+        return transfer, torrents
+
+    try:
+        transfer, torrents = _attempt()
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            _qb_sid = ""
+            if not _qb_login():
+                return {"available": False, "error": "authentication failed"}
+            try:
+                transfer, torrents = _attempt()
+            except Exception as exc2:
+                return {"available": False, "error": str(exc2)}
+        else:
+            return {"available": False, "error": str(exc)}
+    except Exception as exc:
+        return {"available": False, "error": str(exc)}
+
+    states = [t.get("state", "") for t in torrents]
+    return {
+        "available":   True,
+        "dl_speed":    transfer.get("dl_info_speed", 0),
+        "ul_speed":    transfer.get("ul_info_speed", 0),
+        "downloading": sum(1 for s in states if s in _QB_DL_STATES),
+        "seeding":     sum(1 for s in states if s in _QB_SEED_STATES),
+        "paused":      sum(1 for s in states if "paused" in s),
+        "total":       len(torrents),
+    }
+
+
+def _qb_worker():
+    global _qb_result
+    while True:
+        result = _fetch_qbittorrent()
+        with _qb_lock:
+            _qb_result = result
+        time.sleep(10)
+
+
+def get_qbittorrent():
+    if not _QB_PASSWORD:
+        return None
+    with _qb_lock:
+        return _qb_result
+
+
+if _QB_PASSWORD:
+    threading.Thread(target=_qb_worker, daemon=True, name="qb-poller").start()
+
+
 # ── Aggregator ─────────────────────────────────────────────────────────────────
 
 def collect_all():
@@ -361,4 +520,10 @@ def collect_all():
     sonarr = get_sonarr_calendar()
     if sonarr is not None:
         result["sonarr"] = sonarr
+    sabnzbd = get_sabnzbd()
+    if sabnzbd is not None:
+        result["sabnzbd"] = sabnzbd
+    qb = get_qbittorrent()
+    if qb is not None:
+        result["qbittorrent"] = qb
     return result

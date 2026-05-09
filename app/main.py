@@ -73,5 +73,21 @@ def plex_stats():
     return result
 
 
+@app.get("/api/sabnzbd")
+def sabnzbd_stats():
+    result = stats.get_sabnzbd()
+    if result is None:
+        return JSONResponse({"error": "SABNZBD_API_KEY not configured"}, status_code=404)
+    return result
+
+
+@app.get("/api/qbittorrent")
+def qbittorrent_stats():
+    result = stats.get_qbittorrent()
+    if result is None:
+        return JSONResponse({"error": "QB_PASSWORD not configured"}, status_code=404)
+    return result
+
+
 # Serve static frontend from root
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

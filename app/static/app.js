@@ -291,6 +291,60 @@
       plexCard.style.display = 'none';
     }
 
+    // SABnzbd
+    const sabnzbdCard = $('card-sabnzbd');
+    if (d.sabnzbd) {
+      sabnzbdCard.style.display = '';
+      const sab = d.sabnzbd;
+      if (!sab.available) {
+        $('sabnzbd-meta').textContent = sab.error ? 'unavailable: ' + sab.error : 'unavailable';
+        $('sabnzbd-speed').textContent = '—';
+        $('sabnzbd-sizeleft').textContent = '—';
+        $('sabnzbd-slots').innerHTML = '';
+      } else {
+        const statusText = sab.status + (sab.queue_count ? ' · ' + sab.queue_count + (sab.queue_count === 1 ? ' item' : ' items') : '');
+        $('sabnzbd-meta').textContent = statusText;
+        $('sabnzbd-speed').textContent = sab.speed ? sab.speed + '/s' : '0 B/s';
+        $('sabnzbd-sizeleft').textContent = sab.size_left || '0 B';
+        $('sabnzbd-slots').innerHTML = sab.slots.map(s => {
+          const pct = s.percent.toFixed(0);
+          return '<div class="dl-item">' +
+            '<div class="dl-head">' +
+              '<span class="dl-name">' + s.filename + '</span>' +
+              '<span class="dl-pct">' + pct + '%</span>' +
+            '</div>' +
+            '<div class="bar"><div class="bar-fill ' + barClass(s.percent) + '" style="width:' + pct + '%"></div></div>' +
+            '</div>';
+        }).join('');
+      }
+    } else {
+      sabnzbdCard.style.display = 'none';
+    }
+
+    // qBittorrent
+    const qbCard = $('card-qbittorrent');
+    if (d.qbittorrent) {
+      qbCard.style.display = '';
+      const qb = d.qbittorrent;
+      if (!qb.available) {
+        $('qb-meta').textContent = qb.error ? 'unavailable: ' + qb.error : 'unavailable';
+        $('qb-dl').textContent = '—';
+        $('qb-ul').textContent = '—';
+        $('qb-downloading').textContent = '—';
+        $('qb-seeding').textContent = '—';
+        $('qb-paused').textContent = '—';
+      } else {
+        $('qb-meta').textContent = qb.total + (qb.total === 1 ? ' torrent' : ' torrents');
+        $('qb-dl').textContent = fmtRate(qb.dl_speed);
+        $('qb-ul').textContent = fmtRate(qb.ul_speed);
+        $('qb-downloading').textContent = qb.downloading;
+        $('qb-seeding').textContent = qb.seeding;
+        $('qb-paused').textContent = qb.paused;
+      }
+    } else {
+      qbCard.style.display = 'none';
+    }
+
     // Footer
     $('last-update').textContent = new Date().toLocaleTimeString();
     $('refresh-rate').textContent = (REFRESH_MS / 1000) + 's';

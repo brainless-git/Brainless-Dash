@@ -139,6 +139,60 @@
     </div>
   </section>
 
+  <section class="card" id="card-sabnzbd" style="display:none">
+    <div class="card-head">
+      <div class="card-title">
+        <svg class="card-logo" viewBox="0 0 16 16" aria-hidden="true">
+          <rect width="16" height="16" rx="2.5" fill="#F5A623"/>
+          <path d="M8 3v6M5.5 7.5L8 10.5l2.5-3M4.5 13h7" stroke="#1a1a1a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <h2>SABnzbd</h2>
+      </div>
+      <span class="meta" id="sabnzbd-meta">—</span>
+    </div>
+    <div class="net-rates">
+      <div class="rate">
+        <div class="rate-label">↓ Speed</div>
+        <div class="rate-value" id="sabnzbd-speed">—</div>
+      </div>
+      <div class="rate">
+        <div class="rate-label">Queue left</div>
+        <div class="rate-value" id="sabnzbd-sizeleft">—</div>
+      </div>
+    </div>
+    <div class="dl-list" id="sabnzbd-slots"></div>
+  </section>
+
+  <section class="card" id="card-qbittorrent" style="display:none">
+    <div class="card-head">
+      <div class="card-title">
+        <svg class="card-logo" viewBox="0 0 16 16" aria-hidden="true">
+          <rect width="16" height="16" rx="2.5" fill="#2B7BDE"/>
+          <circle cx="7.5" cy="7.5" r="4" stroke="#fff" stroke-width="1.5" fill="none"/>
+          <line x1="10.5" y1="10.5" x2="13" y2="13" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="7.5" cy="7.5" r="1.5" fill="#fff"/>
+        </svg>
+        <h2>qBittorrent</h2>
+      </div>
+      <span class="meta" id="qb-meta">—</span>
+    </div>
+    <div class="net-rates">
+      <div class="rate">
+        <div class="rate-label">↓ Down</div>
+        <div class="rate-value" id="qb-dl">0 B/s</div>
+      </div>
+      <div class="rate">
+        <div class="rate-label">↑ Up</div>
+        <div class="rate-value" id="qb-ul">0 B/s</div>
+      </div>
+    </div>
+    <div class="kv-row">
+      <div class="kv"><span class="k">Downloading</span><span class="v" id="qb-downloading">0</span></div>
+      <div class="kv"><span class="k">Seeding</span><span class="v" id="qb-seeding">0</span></div>
+      <div class="kv"><span class="k">Paused</span><span class="v" id="qb-paused">0</span></div>
+    </div>
+  </section>
+
 </main>
 
 <footer class="footer">

@@ -363,6 +363,37 @@ body {
 .plex-transcode { color: var(--warn); }
 .plex-direct { color: var(--ok); }
 
+/* SABnzbd download slots */
+.dl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.dl-item {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.dl-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 5px;
+  gap: 8px;
+}
+.dl-name {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.dl-pct { color: var(--text-faint); white-space: nowrap; flex-shrink: 0; }
+
 /* Footer */
 .footer {
   display: flex;

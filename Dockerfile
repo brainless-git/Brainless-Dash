@@ -27,7 +27,12 @@ ENV PORT=8090 \
     PLEX_URL=http://localhost:32400 \
     PLEX_TOKEN= \
     SONARR_URL=http://localhost:8989 \
-    SONARR_API_KEY=
+    SONARR_API_KEY= \
+    SABNZBD_URL=http://localhost:8080 \
+    SABNZBD_API_KEY= \
+    QB_URL=http://localhost:8080 \
+    QB_USERNAME=admin \
+    QB_PASSWORD=
 
 # Run as non-root for safety. Mounts /sys and /proc remain readable.
 RUN useradd -r -u 1001 monitor && chown -R monitor:monitor /srv

@@ -14,6 +14,10 @@
 
   function fmtRate(bps) { return fmtBytes(bps) + '/s'; }
 
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   function fmtUptime(secs) {
     const d = Math.floor(secs / 86400);
     const h = Math.floor((secs % 86400) / 3600);
@@ -174,7 +178,7 @@
         const cls = tempClass(s.current, s.high, s.critical);
         return '<div class="temp-legend-item">' +
           '<span class="temp-legend-dot" style="background:' + color + '"></span>' +
-          '<span class="temp-legend-label">' + s.label + '</span>' +
+          '<span class="temp-legend-label">' + esc(s.label) + '</span>' +
           '<span class="temp-legend-value ' + cls + '">' + s.current.toFixed(1) + '°C</span>' +
           '</div>';
       }).join('');
@@ -192,7 +196,7 @@
         totalSize += disk.total;
         return '<div class="disk-item">' +
           '<div class="disk-head">' +
-            '<span class="disk-name">' + disk.name + '</span>' +
+            '<span class="disk-name">' + esc(disk.name) + '</span>' +
             '<span class="disk-stats">' + fmtBytes(disk.used) + ' / ' + fmtBytes(disk.total) + ' (' + disk.percent.toFixed(0) + '%)</span>' +
           '</div>' +
           '<div class="bar"><div class="bar-fill ' + barClass(disk.percent) + '" style="width:' + disk.percent + '%"></div></div>' +
@@ -215,7 +219,7 @@
       const sonarr = d.sonarr;
       const list = $('sonarr-list');
       if (!sonarr.available) {
-        const msg = sonarr.error ? 'sonarr unavailable: ' + sonarr.error : 'sonarr unavailable';
+        const msg = sonarr.error ? 'sonarr unavailable: ' + esc(sonarr.error) : 'sonarr unavailable';
         list.innerHTML = '<div class="empty">' + msg + '</div>';
         $('sonarr-count').textContent = '';
       } else {
@@ -235,7 +239,7 @@
             list.innerHTML = days.map(d2 => {
               const eps = dayMap[d2];
               return '<div class="sonarr-day">' +
-                '<div class="sonarr-day-label">' + eps[0].day_label + '</div>' +
+                '<div class="sonarr-day-label">' + esc(eps[0].day_label) + '</div>' +
                 eps.map(ep => {
                   const epNum = 'S' + String(ep.season).padStart(2, '0') + 'E' + String(ep.episode).padStart(2, '0');
                   const badge = ep.downloaded
@@ -243,8 +247,8 @@
                     : '<span class="sonarr-badge upcoming">Upcoming</span>';
                   return '<div class="sonarr-episode">' +
                     '<div class="sonarr-left">' +
-                      '<span class="sonarr-show">' + ep.show + '</span>' +
-                      '<span class="sonarr-ep-title">' + ep.title + '</span>' +
+                      '<span class="sonarr-show">' + esc(ep.show) + '</span>' +
+                      '<span class="sonarr-ep-title">' + esc(ep.title) + '</span>' +
                     '</div>' +
                     '<div class="sonarr-right"><span class="sonarr-ep-num">' + epNum + '</span>' + badge + '</div>' +
                     '</div>';
@@ -266,20 +270,20 @@
       $('plex-count').textContent = plex.stream_count === 1 ? '1 stream' : plex.stream_count + ' streams';
       const streamList = $('plex-streams');
       if (!plex.available) {
-        const msg = plex.error ? 'plex unavailable: ' + plex.error : 'plex unavailable';
+        const msg = plex.error ? 'plex unavailable: ' + esc(plex.error) : 'plex unavailable';
         streamList.innerHTML = '<div class="empty">' + msg + '</div>';
       } else if (!plex.sessions.length) {
         streamList.innerHTML = '<div class="empty">no active streams</div>';
       } else {
         streamList.innerHTML = plex.sessions.map(s => {
-          const heading = s.show ? s.show + ' — ' + s.title : s.title;
+          const heading = s.show ? esc(s.show) + ' — ' + esc(s.title) : esc(s.title);
           const pausedBadge = s.state === 'paused' ? ' <span class="plex-paused">(paused)</span>' : '';
           const streamBadge = s.transcoding
             ? '<span class="plex-transcode">transcoding</span>'
             : '<span class="plex-direct">direct play</span>';
           return '<div class="plex-session">' +
             '<div class="plex-title">' + heading + pausedBadge + '</div>' +
-            '<div class="plex-meta"><span>' + s.user + ' · ' + s.player + '</span>' + streamBadge + '</div>' +
+            '<div class="plex-meta"><span>' + esc(s.user) + ' · ' + esc(s.player) + '</span>' + streamBadge + '</div>' +
             '<div class="bar"><div class="bar-fill" style="width:' + s.progress_pct + '%"></div></div>' +
             '</div>';
         }).join('');
@@ -305,7 +309,7 @@
         $('mc-motd').textContent = mc.motd || mc.version || '';
         if (mc.players.length) {
           $('mc-players').innerHTML = mc.players
-            .map(p => '<span class="mc-player">' + p + '</span>').join('');
+            .map(p => '<span class="mc-player">' + esc(p) + '</span>').join('');
         } else if (mc.players_online > 0) {
           $('mc-players').innerHTML = '<span class="empty">' + mc.players_online +
             ' player' + (mc.players_online !== 1 ? 's' : '') + ' online</span>';
@@ -337,7 +341,7 @@
           const pct = s.percent.toFixed(0);
           return '<div class="dl-item">' +
             '<div class="dl-head">' +
-              '<span class="dl-name">' + s.filename + '</span>' +
+              '<span class="dl-name">' + esc(s.filename) + '</span>' +
               '<span class="dl-pct">' + pct + '%</span>' +
             '</div>' +
             '<div class="bar"><div class="bar-fill ' + barClass(s.percent) + '" style="width:' + pct + '%"></div></div>' +

@@ -5,7 +5,6 @@ import os
 import re
 import signal
 import socket
-import ssl
 import struct
 import subprocess
 import threading
@@ -40,6 +39,19 @@ _MC_PORT          = int(os.environ.get("MC_PORT",          "25565"))
 _MC_RCON_PORT     = int(os.environ.get("MC_RCON_PORT",     "25575"))
 _MC_RCON_PASSWORD = os.environ.get("MC_RCON_PASSWORD", "")
 
+
+def _check_service_url(name, url):
+    """Warn at startup if a service URL has an unexpected scheme."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        log.warning("%s has an unexpected URL (expected http or https): %s", name, url)
+
+
+if _PLEX_TOKEN:                 _check_service_url("PLEX_URL",    _PLEX_URL)
+if _SONARR_API_KEY:             _check_service_url("SONARR_URL",  _SONARR_URL)
+if _SABNZBD_API_KEY:            _check_service_url("SABNZBD_URL", _SABNZBD_URL)
+if _QB_API_KEY or _QB_PASSWORD: _check_service_url("QB_URL",      _QB_URL)
+
 # ── Values that never change: computed once at startup ─────────────────────────
 try:
     _HOSTNAME = os.uname().nodename
@@ -51,11 +63,6 @@ _CPU_CORES   = psutil.cpu_count(logical=False) or psutil.cpu_count()
 _CPU_THREADS = psutil.cpu_count(logical=True)
 _MEM_TOTAL   = psutil.virtual_memory().total
 _BOOT_TIME   = psutil.boot_time()
-
-# ── SSL context for HTTPS Plex ─────────────────────────────────────────────────
-_ssl_ctx = ssl.create_default_context()
-_ssl_ctx.check_hostname = False
-_ssl_ctx.verify_mode = ssl.CERT_NONE
 
 # ── CPU chip temperature filtering ─────────────────────────────────────────────
 _CPU_CHIPS = {"k10temp", "coretemp", "zenpower"}
@@ -244,14 +251,14 @@ _plex_result = None
 
 
 def _fetch_plex():
-    url = f"{_PLEX_URL}/status/sessions?X-Plex-Token={_PLEX_TOKEN}"
-    req = urllib.request.Request(url, headers={"X-Plex-Token": _PLEX_TOKEN})
+    url = f"{_PLEX_URL}/status/sessions"
+    req = urllib.request.Request(url, headers={"X-Plex-Token": _PLEX_TOKEN, "Accept": "application/xml"})
     try:
-        with urllib.request.urlopen(req, timeout=5, context=_ssl_ctx) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             root = ET.fromstring(resp.read())
     except Exception as exc:
         log.warning("Plex request failed: %s", exc)
-        return {"available": False, "stream_count": 0, "sessions": [], "error": str(exc)}
+        return {"available": False, "stream_count": 0, "sessions": [], "error": "upstream request failed"}
 
     sessions = []
     for item in root.findall("Video") + root.findall("Track") + root.findall("Photo"):
@@ -305,16 +312,16 @@ def _fetch_sonarr():
     end   = today + timedelta(days=5)
     url = (
         f"{_SONARR_URL}/api/v3/calendar"
-        f"?apikey={_SONARR_API_KEY}"
-        f"&start={today.isoformat()}&end={end.isoformat()}"
+        f"?start={today.isoformat()}&end={end.isoformat()}"
         f"&includeSeries=true"
     )
+    req = urllib.request.Request(url, headers={"X-Api-Key": _SONARR_API_KEY})
     try:
-        with urllib.request.urlopen(urllib.request.Request(url), timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             items = json.loads(resp.read())
     except Exception as exc:
         log.warning("Sonarr request failed: %s", exc)
-        return {"available": False, "episodes": [], "error": str(exc)}
+        return {"available": False, "episodes": [], "error": "upstream request failed"}
 
     day_labels = {
         today.isoformat(): "Today",
@@ -372,16 +379,14 @@ _sabnzbd_result = None
 
 
 def _fetch_sabnzbd():
-    url = (
-        f"{_SABNZBD_URL}/api"
-        f"?mode=queue&output=json&apikey={_SABNZBD_API_KEY}"
-    )
+    url = f"{_SABNZBD_URL}/api?mode=queue&output=json"
+    req = urllib.request.Request(url, headers={"X-API-Key": _SABNZBD_API_KEY})
     try:
-        with urllib.request.urlopen(urllib.request.Request(url), timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read())
     except Exception as exc:
         log.warning("SABnzbd request failed: %s", exc)
-        return {"available": False, "error": str(exc)}
+        return {"available": False, "error": "upstream request failed"}
 
     q = data.get("queue", {})
     slots = q.get("slots", [])
@@ -484,11 +489,14 @@ def _fetch_qbittorrent():
             try:
                 transfer, torrents = _attempt()
             except Exception as exc2:
-                return {"available": False, "error": str(exc2)}
+                log.warning("qBittorrent request failed after re-auth: %s", exc2)
+                return {"available": False, "error": "upstream request failed"}
         else:
-            return {"available": False, "error": str(exc)}
+            log.warning("qBittorrent request failed: %s", exc)
+            return {"available": False, "error": "upstream request failed"}
     except Exception as exc:
-        return {"available": False, "error": str(exc)}
+        log.warning("qBittorrent request failed: %s", exc)
+        return {"available": False, "error": "upstream request failed"}
 
     states = [t.get("state", "") for t in torrents]
     return {
@@ -609,7 +617,7 @@ def _fetch_minecraft():
             status = json.loads(pkt[pos:pos + str_len])
     except Exception as exc:
         log.debug("Minecraft ping failed: %s", exc)
-        return {"online": False, "error": str(exc)}
+        return {"online": False, "error": "server unreachable"}
 
     players  = status.get("players", {})
     sample   = players.get("sample") or []
@@ -644,6 +652,10 @@ def send_mc_chat(message):
     """Send a message to the server via RCON. Returns (ok, error_str)."""
     if not _MC_RCON_PASSWORD:
         return False, "RCON not configured"
+    # Strip control characters to prevent RCON command injection via newline chaining.
+    message = re.sub(r'[\x00-\x1f\x7f]', '', message)
+    if not message:
+        return False, "message is empty"
     try:
         with socket.create_connection((_MC_HOST, _MC_RCON_PORT), timeout=5) as s:
             def _recv_exact(n):
@@ -669,7 +681,7 @@ def send_mc_chat(message):
             return True, None
     except Exception as exc:
         log.warning("RCON error: %s", exc)
-        return False, str(exc)
+        return False, "RCON command failed"
 
 
 if _MC_HOST:

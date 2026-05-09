@@ -43,34 +43,39 @@
     </div>
   </section>
 
-  <section class="card" id="card-cpu">
+  <section class="card" id="card-resources">
     <div class="card-head">
-      <h2>CPU</h2>
-      <span class="meta"><span id="cpu-percent">0</span>% <span class="meta-dim" id="cpu-freq"></span></span>
+      <h2>CPU &amp; Memory</h2>
+      <span class="meta" id="resource-meta">—</span>
     </div>
-    <div class="bar"><div class="bar-fill" id="cpu-bar"></div></div>
-    <div class="cores" id="cpu-cores"></div>
-  </section>
-
-  <section class="card" id="card-mem">
-    <div class="card-head">
-      <h2>Memory</h2>
-      <span class="meta"><span id="mem-used">0</span> / <span id="mem-total">0</span></span>
+    <div class="resource-section">
+      <div class="resource-label">
+        <span class="resource-name">CPU</span>
+        <span class="resource-value"><span id="cpu-percent">0</span>% <span class="meta-dim" id="cpu-freq"></span></span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="cpu-bar"></div></div>
     </div>
-    <div class="bar"><div class="bar-fill" id="mem-bar"></div></div>
+    <div class="resource-section">
+      <div class="resource-label">
+        <span class="resource-name">Memory</span>
+        <span class="resource-value"><span id="mem-used">—</span> / <span id="mem-total">—</span></span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="mem-bar"></div></div>
+    </div>
     <div class="kv-row">
-      <div class="kv"><span class="k">Available</span><span class="v" id="mem-available">,</span></div>
-      <div class="kv"><span class="k">Swap</span><span class="v" id="swap">,</span></div>
+      <div class="kv"><span class="k">Available</span><span class="v" id="mem-available">—</span></div>
+      <div class="kv"><span class="k">Swap</span><span class="v" id="swap">—</span></div>
     </div>
   </section>
 
   <section class="card" id="card-temps">
     <div class="card-head">
       <h2>Temperatures</h2>
-      <span class="meta" id="temp-count">,</span>
+      <span class="meta" id="temp-count">—</span>
     </div>
-    <div class="temp-list" id="temp-list">
-      <div class="empty">Reading sensors,</div>
+    <canvas id="temp-canvas" height="140"></canvas>
+    <div class="temp-legend" id="temp-legend">
+      <div class="empty">Reading sensors…</div>
     </div>
   </section>
 

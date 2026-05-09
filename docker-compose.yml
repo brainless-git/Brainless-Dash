@@ -9,7 +9,6 @@ services:
     #     - "8090:8090"
     #     - "8180:8180"   # ACME HTTP-01 challenge port (forward port 80 here)
     network_mode: host
-    pid: host
     # Read-only mounts for host metrics; rw mount for ACME cert storage.
     volumes:
       - /sys:/sys:ro

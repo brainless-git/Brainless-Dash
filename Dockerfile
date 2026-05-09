@@ -7,9 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /srv
 
-# gcc is only needed to compile psutil; certbot is kept for ACME cert management
+# gcc is only needed to compile psutil; bash is needed by entrypoint.sh; certbot is kept for ACME cert management
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc \
+    && apt-get install -y --no-install-recommends gcc bash \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

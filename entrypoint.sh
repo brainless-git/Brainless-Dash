@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Brainless-Dash entrypoint — optional Let's Encrypt cert acquisition before uvicorn starts.
 #
 # Set ACME_DOMAIN + ACME_EMAIL to enable automatic HTTPS.
@@ -32,22 +32,31 @@ if [ -n "$ACME_DOMAIN" ] && [ -n "$ACME_EMAIL" ]; then
 
     mkdir -p /tmp/certbot/work /tmp/certbot/logs "$CERTDIR"
 
-    # Build challenge arguments
+    # Build challenge arguments as an array to prevent word-splitting and injection.
+    CHALLENGE_ARGS=()
     if [ -n "$ACME_DNS_PLUGIN" ]; then
-        CHALLENGE="--dns-${ACME_DNS_PLUGIN}"
-        [ -n "$ACME_DNS_CREDENTIALS" ] && \
-            CHALLENGE="$CHALLENGE --dns-${ACME_DNS_PLUGIN}-credentials $ACME_DNS_CREDENTIALS"
+        # Validate plugin name against the supported allowlist.
+        case "$ACME_DNS_PLUGIN" in
+            cloudflare|digitalocean|duckdns) ;;
+            *)
+                echo "[acme] ERROR: ACME_DNS_PLUGIN '$ACME_DNS_PLUGIN' is not supported. Allowed: cloudflare, digitalocean, duckdns."
+                exit 1
+                ;;
+        esac
+        CHALLENGE_ARGS+=(--dns-"${ACME_DNS_PLUGIN}")
+        if [ -n "$ACME_DNS_CREDENTIALS" ]; then
+            CHALLENGE_ARGS+=(--dns-"${ACME_DNS_PLUGIN}"-credentials "$ACME_DNS_CREDENTIALS")
+        fi
         echo "[acme] Using DNS-01 challenge via plugin: $ACME_DNS_PLUGIN"
     else
-        CHALLENGE="--standalone --http-01-port ${ACME_CHALLENGE_PORT:-8180}"
+        CHALLENGE_ARGS+=(--standalone --http-01-port "${ACME_CHALLENGE_PORT:-8180}")
         echo "[acme] Using HTTP-01 challenge on port ${ACME_CHALLENGE_PORT:-8180}"
     fi
 
     if [ ! -f "$LIVE/fullchain.pem" ]; then
         echo "[acme] Obtaining certificate for $ACME_DOMAIN..."
-        # shellcheck disable=SC2086
         certbot certonly \
-            $CHALLENGE \
+            "${CHALLENGE_ARGS[@]}" \
             --email "$ACME_EMAIL" \
             --agree-tos \
             --no-eff-email \
@@ -68,9 +77,10 @@ if [ -n "$ACME_DOMAIN" ] && [ -n "$ACME_EMAIL" ]; then
     fi
 fi
 
-SSL=""
+# Build SSL args as an array to handle paths with spaces correctly.
+SSL_ARGS=()
 if [ -n "$HTTPS_CERT" ] && [ -n "$HTTPS_KEY" ]; then
-    SSL="--ssl-certfile $HTTPS_CERT --ssl-keyfile $HTTPS_KEY"
+    SSL_ARGS+=(--ssl-certfile "$HTTPS_CERT" --ssl-keyfile "$HTTPS_KEY")
     echo "[acme] Starting with HTTPS."
 fi
 
@@ -78,4 +88,4 @@ exec uvicorn app.main:app \
     --host 0.0.0.0 \
     --port "${PORT:-8090}" \
     --log-level "${LOG_LEVEL:-info}" \
-    $SSL
+    "${SSL_ARGS[@]}"

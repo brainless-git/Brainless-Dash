@@ -14,7 +14,7 @@
   <WebUI>http://[IP]:[PORT:8090]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/brainless-git/brainless-dash/main/brainless-dash.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/brainless-git/brainless-dash/main/assets/icon.svg</Icon>
-  <ExtraParams>--pid=host</ExtraParams>
+  <ExtraParams></ExtraParams>
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>

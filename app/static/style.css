@@ -106,6 +106,16 @@ body {
   border-bottom: 1px solid var(--border-soft);
   padding-bottom: 8px;
 }
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.card-logo {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
 .card-head h2 {
   font-size: 11px;
   font-weight: 700;

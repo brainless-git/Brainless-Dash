@@ -197,18 +197,7 @@
     // Network
     $('net-down').textContent = fmtRate(d.network.rate_recv_bps);
     $('net-up').textContent = fmtRate(d.network.rate_sent_bps);
-    $('net-iface-count').textContent = d.network.interfaces.length + ' interfaces';
-
-    const ifaceList = $('iface-list');
-    ifaceList.innerHTML = '';
-    d.network.interfaces.forEach((i) => {
-      const row = document.createElement('div');
-      row.className = 'iface-item';
-      row.innerHTML =
-        '<span class="iface-name">' + i.name + '</span>' +
-        '<span class="iface-totals">↓ ' + fmtBytes(i.bytes_recv) + ' &nbsp; ↑ ' + fmtBytes(i.bytes_sent) + '</span>';
-      ifaceList.appendChild(row);
-    });
+    $('net-iface-count').textContent = d.network.interfaces.length + (d.network.interfaces.length === 1 ? ' interface' : ' interfaces');
 
     // Sonarr
     const sonarrCard = $('card-sonarr');

@@ -7,15 +7,12 @@
   function fmtBytes(n) {
     if (n === null || n === undefined || isNaN(n)) return '—';
     const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-    let i = 0;
-    let v = Number(n);
+    let i = 0, v = Number(n);
     while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
     return v.toFixed(v < 10 && i > 0 ? 2 : v < 100 ? 1 : 0) + ' ' + units[i];
   }
 
-  function fmtRate(bps) {
-    return fmtBytes(bps) + '/s';
-  }
+  function fmtRate(bps) { return fmtBytes(bps) + '/s'; }
 
   function fmtUptime(secs) {
     const d = Math.floor(secs / 86400);
@@ -29,83 +26,96 @@
   }
 
   function barClass(pct) {
-    if (pct >= 90) return 'crit';
-    if (pct >= 75) return 'warn';
-    return '';
+    return pct >= 90 ? 'crit' : pct >= 75 ? 'warn' : '';
   }
 
   function tempClass(t, high, crit) {
     if (crit && t >= crit) return 'crit';
     if (high && t >= high) return 'warn';
-    if (t >= 80) return 'crit';
-    if (t >= 65) return 'warn';
-    return '';
+    return t >= 80 ? 'crit' : t >= 65 ? 'warn' : '';
   }
 
-  // Temperature graph state
+  // ── Temperature graph ────────────────────────────────────────────────────────
+
   const TEMP_COLORS = ['#e22828', '#4caf50', '#2196f3', '#ff9800', '#9c27b0', '#00bcd4', '#ff5722'];
   const TEMP_HISTORY_MAX = 60;
-  const tempHistory = [];
+  const tempHistory = []; // array of {label: temp} maps
+  let tempCanvasW = 0;
+
+  function initCanvas() {
+    const canvas = $('temp-canvas');
+    if (!canvas) return;
+    // Use ResizeObserver so we only measure on actual layout changes
+    if (window.ResizeObserver) {
+      new ResizeObserver(entries => {
+        const w = Math.round(entries[0].contentRect.width);
+        if (w > 0 && w !== tempCanvasW) { tempCanvasW = w; canvas.width = w; }
+      }).observe(canvas);
+    } else {
+      window.addEventListener('resize', () => {
+        const w = canvas.offsetWidth;
+        if (w > 0 && w !== tempCanvasW) { tempCanvasW = w; canvas.width = w; }
+      });
+    }
+    tempCanvasW = canvas.offsetWidth;
+    canvas.width = tempCanvasW;
+  }
 
   function drawTempGraph(sensors) {
     const canvas = $('temp-canvas');
-    if (!canvas || !canvas.getContext) return;
+    if (!canvas || !canvas.getContext || sensors.length === 0) return;
 
-    // Push snapshot into history
-    tempHistory.push(sensors.map(s => ({ label: s.label, current: s.current })));
+    // Push snapshot as a label→temp map (O(1) lookup later)
+    const frame = {};
+    sensors.forEach(s => { frame[s.label] = s.current; });
+    tempHistory.push(frame);
     if (tempHistory.length > TEMP_HISTORY_MAX) tempHistory.shift();
-
-    // Match canvas pixel width to its CSS width
-    const cssW = canvas.getBoundingClientRect().width;
-    if (cssW > 0 && canvas.width !== Math.round(cssW)) canvas.width = Math.round(cssW);
+    if (tempHistory.length < 2) return;
 
     const ctx = canvas.getContext('2d');
-    const w = canvas.width;
+    const w = tempCanvasW || canvas.width;
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    if (tempHistory.length < 2 || sensors.length === 0) return;
-
     // Y range across all history
     let minT = Infinity, maxT = -Infinity;
-    tempHistory.forEach(frame => frame.forEach(s => {
-      if (s.current < minT) minT = s.current;
-      if (s.current > maxT) maxT = s.current;
+    tempHistory.forEach(f => Object.values(f).forEach(t => {
+      if (t < minT) minT = t;
+      if (t > maxT) maxT = t;
     }));
     minT = Math.max(0, minT - 5);
     maxT = maxT + 5;
     const range = maxT - minT || 1;
 
-    const toX = (fi) => (fi / (TEMP_HISTORY_MAX - 1)) * w;
-    const toY = (t) => h - 2 - ((t - minT) / range) * (h - 10);
+    const offset = TEMP_HISTORY_MAX - tempHistory.length;
+    const toX = (fi) => ((offset + fi) / (TEMP_HISTORY_MAX - 1)) * w;
+    const toY = (t)  => h - 2 - ((t - minT) / range) * (h - 10);
 
-    // Horizontal grid lines
+    // Grid lines
     const step = range > 40 ? 20 : range > 20 ? 10 : 5;
     const firstGrid = Math.ceil(minT / step) * step;
+    ctx.strokeStyle = '#2e2e2e';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#555';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'left';
     for (let t = firstGrid; t <= maxT; t += step) {
       const y = Math.round(toY(t)) + 0.5;
-      ctx.strokeStyle = '#2e2e2e';
-      ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-      ctx.fillStyle = '#555';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'left';
       ctx.fillText(t + '°', 3, y - 2);
     }
 
     // One line per sensor
-    const offset = TEMP_HISTORY_MAX - tempHistory.length;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
     sensors.forEach((sensor, si) => {
       ctx.strokeStyle = TEMP_COLORS[si % TEMP_COLORS.length];
-      ctx.lineWidth = 1.5;
-      ctx.lineJoin = 'round';
       ctx.beginPath();
       let started = false;
-      tempHistory.forEach((frame, fi) => {
-        const s = frame.find(f => f.label === sensor.label);
-        if (!s) return;
-        const x = toX(offset + fi);
-        const y = toY(s.current);
+      tempHistory.forEach((f, fi) => {
+        const t = f[sensor.label];
+        if (t === undefined) return;
+        const x = toX(fi), y = toY(t);
         if (!started) { ctx.moveTo(x, y); started = true; }
         else ctx.lineTo(x, y);
       });
@@ -113,19 +123,27 @@
     });
   }
 
+  // ── Sonarr change detection ──────────────────────────────────────────────────
+
+  let _sonarrHash = '';
+  function sonarrKey(episodes) {
+    return episodes.map(e => e.air_date + e.show + e.episode + e.downloaded).join('|');
+  }
+
+  // ── Main render ──────────────────────────────────────────────────────────────
+
   function render(d) {
-    // Header
     $('hostname').textContent = d.hostname || 'unknown';
     $('status-dot').className = 'dot dot-on';
 
     // System
-    $('uptime').textContent = 'up ' + fmtUptime(d.uptime);
-    $('load1').textContent = d.cpu.load_1m.toFixed(2);
-    $('load5').textContent = d.cpu.load_5m.toFixed(2);
-    $('load15').textContent = d.cpu.load_15m.toFixed(2);
-    $('cores').textContent = d.cpu.cores + ' / ' + d.cpu.threads + 't';
+    $('uptime').textContent  = 'up ' + fmtUptime(d.uptime);
+    $('load1').textContent   = d.cpu.load_1m.toFixed(2);
+    $('load5').textContent   = d.cpu.load_5m.toFixed(2);
+    $('load15').textContent  = d.cpu.load_15m.toFixed(2);
+    $('cores').textContent   = d.cpu.cores + ' / ' + d.cpu.threads + 't';
 
-    // Resources — CPU
+    // CPU & Memory
     const cpuPct = d.cpu.percent;
     $('cpu-percent').textContent = cpuPct.toFixed(0);
     $('cpu-freq').textContent = d.cpu.freq_mhz ? '@ ' + (d.cpu.freq_mhz / 1000).toFixed(2) + ' GHz' : '';
@@ -133,7 +151,6 @@
     cpuBar.style.width = cpuPct + '%';
     cpuBar.className = 'bar-fill ' + barClass(cpuPct);
 
-    // Resources — Memory
     const m = d.memory;
     $('mem-used').textContent = fmtBytes(m.used);
     $('mem-total').textContent = fmtBytes(m.total);
@@ -146,7 +163,7 @@
       : 'none';
     $('resource-meta').textContent = 'CPU ' + cpuPct.toFixed(0) + '% · MEM ' + m.percent.toFixed(0) + '%';
 
-    // Temperatures — line graph + legend
+    // Temperatures
     const temps = d.temps || [];
     if (temps.length === 0) {
       $('temp-count').textContent = '0 sensors';
@@ -154,105 +171,91 @@
     } else {
       $('temp-count').textContent = temps.length + (temps.length === 1 ? ' sensor' : ' sensors');
       drawTempGraph(temps);
-      const legend = $('temp-legend');
-      legend.innerHTML = '';
-      temps.forEach((s, si) => {
+      // Build legend as a single innerHTML string — no per-item reflow
+      $('temp-legend').innerHTML = temps.map((s, si) => {
         const color = TEMP_COLORS[si % TEMP_COLORS.length];
         const cls = tempClass(s.current, s.high, s.critical);
-        const item = document.createElement('div');
-        item.className = 'temp-legend-item';
-        item.innerHTML =
+        return '<div class="temp-legend-item">' +
           '<span class="temp-legend-dot" style="background:' + color + '"></span>' +
           '<span class="temp-legend-label">' + s.label + '</span>' +
-          '<span class="temp-legend-value ' + cls + '">' + s.current.toFixed(1) + '°C</span>';
-        legend.appendChild(item);
-      });
+          '<span class="temp-legend-value ' + cls + '">' + s.current.toFixed(1) + '°C</span>' +
+          '</div>';
+      }).join('');
     }
 
     // Storage
     const dList = $('disk-list');
-    dList.innerHTML = '';
     let totalUsed = 0, totalSize = 0;
     if (!d.storage.disks.length) {
       dList.innerHTML = '<div class="empty">no mounts found</div>';
       $('storage-summary').textContent = '0 mounts';
     } else {
-      d.storage.disks.forEach((disk) => {
+      dList.innerHTML = d.storage.disks.map(disk => {
         totalUsed += disk.used;
         totalSize += disk.total;
-        const item = document.createElement('div');
-        item.className = 'disk-item';
-        item.innerHTML =
+        return '<div class="disk-item">' +
           '<div class="disk-head">' +
             '<span class="disk-name">' + disk.name + '</span>' +
             '<span class="disk-stats">' + fmtBytes(disk.used) + ' / ' + fmtBytes(disk.total) + ' (' + disk.percent.toFixed(0) + '%)</span>' +
           '</div>' +
-          '<div class="bar"><div class="bar-fill ' + barClass(disk.percent) + '" style="width:' + disk.percent + '%"></div></div>';
-        dList.appendChild(item);
-      });
+          '<div class="bar"><div class="bar-fill ' + barClass(disk.percent) + '" style="width:' + disk.percent + '%"></div></div>' +
+          '</div>';
+      }).join('');
       const overall = totalSize > 0 ? ((totalUsed / totalSize) * 100).toFixed(0) : 0;
       $('storage-summary').textContent = fmtBytes(totalUsed) + ' / ' + fmtBytes(totalSize) + ' (' + overall + '%)';
     }
 
     // Network
     $('net-down').textContent = fmtRate(d.network.rate_recv_bps);
-    $('net-up').textContent = fmtRate(d.network.rate_sent_bps);
-    $('net-iface-count').textContent = d.network.interfaces.length + (d.network.interfaces.length === 1 ? ' interface' : ' interfaces');
+    $('net-up').textContent   = fmtRate(d.network.rate_sent_bps);
+    const ifaceCount = d.network.interfaces.length;
+    $('net-iface-count').textContent = ifaceCount + (ifaceCount === 1 ? ' interface' : ' interfaces');
 
-    // Sonarr
+    // Sonarr — skip DOM rebuild if episodes haven't changed
     const sonarrCard = $('card-sonarr');
     if (d.sonarr) {
       sonarrCard.style.display = '';
       const sonarr = d.sonarr;
       const list = $('sonarr-list');
-      list.innerHTML = '';
       if (!sonarr.available) {
         const msg = sonarr.error ? 'sonarr unavailable: ' + sonarr.error : 'sonarr unavailable';
         list.innerHTML = '<div class="empty">' + msg + '</div>';
         $('sonarr-count').textContent = '';
-      } else if (!sonarr.episodes.length) {
-        list.innerHTML = '<div class="empty">no episodes in the next 5 days</div>';
-        $('sonarr-count').textContent = 'nothing upcoming';
       } else {
-        $('sonarr-count').textContent = sonarr.episodes.length + (sonarr.episodes.length === 1 ? ' episode' : ' episodes');
-        // Group by day
-        const days = [];
-        const dayMap = {};
-        sonarr.episodes.forEach((ep) => {
-          if (!dayMap[ep.air_date]) {
-            dayMap[ep.air_date] = [];
-            days.push(ep.air_date);
+        const hash = sonarrKey(sonarr.episodes);
+        if (hash !== _sonarrHash) {
+          _sonarrHash = hash;
+          if (!sonarr.episodes.length) {
+            list.innerHTML = '<div class="empty">no episodes in the next 5 days</div>';
+            $('sonarr-count').textContent = 'nothing upcoming';
+          } else {
+            $('sonarr-count').textContent = sonarr.episodes.length + (sonarr.episodes.length === 1 ? ' episode' : ' episodes');
+            const days = [], dayMap = {};
+            sonarr.episodes.forEach(ep => {
+              if (!dayMap[ep.air_date]) { dayMap[ep.air_date] = []; days.push(ep.air_date); }
+              dayMap[ep.air_date].push(ep);
+            });
+            list.innerHTML = days.map(d2 => {
+              const eps = dayMap[d2];
+              return '<div class="sonarr-day">' +
+                '<div class="sonarr-day-label">' + eps[0].day_label + '</div>' +
+                eps.map(ep => {
+                  const epNum = 'S' + String(ep.season).padStart(2, '0') + 'E' + String(ep.episode).padStart(2, '0');
+                  const badge = ep.downloaded
+                    ? '<span class="sonarr-badge downloaded">Downloaded</span>'
+                    : '<span class="sonarr-badge upcoming">Upcoming</span>';
+                  return '<div class="sonarr-episode">' +
+                    '<div class="sonarr-left">' +
+                      '<span class="sonarr-show">' + ep.show + '</span>' +
+                      '<span class="sonarr-ep-title">' + ep.title + '</span>' +
+                    '</div>' +
+                    '<div class="sonarr-right"><span class="sonarr-ep-num">' + epNum + '</span>' + badge + '</div>' +
+                    '</div>';
+                }).join('') +
+                '</div>';
+            }).join('');
           }
-          dayMap[ep.air_date].push(ep);
-        });
-        days.forEach((date) => {
-          const dayEps = dayMap[date];
-          const dayEl = document.createElement('div');
-          dayEl.className = 'sonarr-day';
-          const label = document.createElement('div');
-          label.className = 'sonarr-day-label';
-          label.textContent = dayEps[0].day_label;
-          dayEl.appendChild(label);
-          dayEps.forEach((ep) => {
-            const epEl = document.createElement('div');
-            epEl.className = 'sonarr-episode';
-            const epNum = 'S' + String(ep.season).padStart(2, '0') + 'E' + String(ep.episode).padStart(2, '0');
-            const badge = ep.downloaded
-              ? '<span class="sonarr-badge downloaded">Downloaded</span>'
-              : '<span class="sonarr-badge upcoming">Upcoming</span>';
-            epEl.innerHTML =
-              '<div class="sonarr-left">' +
-                '<span class="sonarr-show">' + ep.show + '</span>' +
-                '<span class="sonarr-ep-title">' + ep.title + '</span>' +
-              '</div>' +
-              '<div class="sonarr-right">' +
-                '<span class="sonarr-ep-num">' + epNum + '</span>' +
-                badge +
-              '</div>';
-            dayEl.appendChild(epEl);
-          });
-          list.appendChild(dayEl);
-        });
+        }
       }
     } else {
       sonarrCard.style.display = 'none';
@@ -265,35 +268,31 @@
       const plex = d.plex;
       $('plex-count').textContent = plex.stream_count === 1 ? '1 stream' : plex.stream_count + ' streams';
       const streamList = $('plex-streams');
-      streamList.innerHTML = '';
       if (!plex.available) {
         const msg = plex.error ? 'plex unavailable: ' + plex.error : 'plex unavailable';
         streamList.innerHTML = '<div class="empty">' + msg + '</div>';
       } else if (!plex.sessions.length) {
         streamList.innerHTML = '<div class="empty">no active streams</div>';
       } else {
-        plex.sessions.forEach((s) => {
-          const item = document.createElement('div');
-          item.className = 'plex-session';
+        streamList.innerHTML = plex.sessions.map(s => {
           const heading = s.show ? s.show + ' — ' + s.title : s.title;
           const pausedBadge = s.state === 'paused' ? ' <span class="plex-paused">(paused)</span>' : '';
           const streamBadge = s.transcoding
             ? '<span class="plex-transcode">transcoding</span>'
             : '<span class="plex-direct">direct play</span>';
-          item.innerHTML =
+          return '<div class="plex-session">' +
             '<div class="plex-title">' + heading + pausedBadge + '</div>' +
             '<div class="plex-meta"><span>' + s.user + ' · ' + s.player + '</span>' + streamBadge + '</div>' +
-            '<div class="bar"><div class="bar-fill" style="width:' + s.progress_pct + '%"></div></div>';
-          streamList.appendChild(item);
-        });
+            '<div class="bar"><div class="bar-fill" style="width:' + s.progress_pct + '%"></div></div>' +
+            '</div>';
+        }).join('');
       }
     } else {
       plexCard.style.display = 'none';
     }
 
     // Footer
-    const t = new Date();
-    $('last-update').textContent = t.toLocaleTimeString();
+    $('last-update').textContent = new Date().toLocaleTimeString();
     $('refresh-rate').textContent = (REFRESH_MS / 1000) + 's';
   }
 
@@ -306,8 +305,7 @@
     try {
       const r = await fetch('/api/stats', { cache: 'no-store' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json();
-      render(data);
+      render(await r.json());
     } catch (e) {
       console.error(e);
       setError();
@@ -315,17 +313,14 @@
   }
 
   async function init() {
+    initCanvas();
     try {
       const r = await fetch('/api/config', { cache: 'no-store' });
       if (r.ok) {
         const cfg = await r.json();
-        if (cfg.refresh_ms && cfg.refresh_ms >= 500) {
-          REFRESH_MS = cfg.refresh_ms;
-        }
+        if (cfg.refresh_ms && cfg.refresh_ms >= 500) REFRESH_MS = cfg.refresh_ms;
       }
-    } catch (e) {
-      /* fall back to default */
-    }
+    } catch (e) { /* use default */ }
     tick();
     setInterval(tick, REFRESH_MS);
   }

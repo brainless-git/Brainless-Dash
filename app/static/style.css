@@ -221,27 +221,11 @@ body {
 .kv .k { color: var(--text-faint); text-transform: uppercase; font-size: 10px; letter-spacing: 0.08em; }
 .kv .v { color: var(--text); }
 
-/* Temperature list */
-.temp-list, .disk-list, .iface-list {
+.disk-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.temp-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 10px;
-  background: var(--bg);
-  border: 1px solid var(--border-soft);
-  border-radius: 2px;
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.temp-item .label { color: var(--text-dim); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.temp-item .value { font-weight: 600; min-width: 60px; text-align: right; }
-.temp-item.warn .value { color: var(--warn); }
-.temp-item.crit .value { color: var(--crit); }
 
 /* Disks */
 .disk-item {
@@ -296,19 +280,6 @@ body {
   font-weight: 600;
   color: var(--accent);
 }
-.iface-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 10px;
-  background: var(--bg);
-  border: 1px solid var(--border-soft);
-  border-radius: 2px;
-  font-family: var(--mono);
-  font-size: 11px;
-}
-.iface-item .iface-name { color: var(--text); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.iface-item .iface-totals { color: var(--text-faint); white-space: nowrap; flex-shrink: 0; }
 
 .empty {
   color: var(--text-faint);

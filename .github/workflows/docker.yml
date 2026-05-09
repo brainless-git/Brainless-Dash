@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - claude/new-session-VmqdV
   workflow_dispatch:
 
 jobs:

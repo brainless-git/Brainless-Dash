@@ -363,6 +363,67 @@ body {
 .plex-transcode { color: var(--warn); }
 .plex-direct { color: var(--ok); }
 
+/* Minecraft */
+.mc-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.mc-motd { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  min-height: 20px;
+}
+.mc-player {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 7px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  color: var(--text);
+}
+.mc-chat {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 2px;
+}
+.mc-chat-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+}
+.mc-chat-input:focus { border-color: var(--accent); }
+.mc-chat-btn {
+  background: var(--accent);
+  border: none;
+  border-radius: 2px;
+  color: #fff;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.mc-chat-btn:hover { background: var(--accent-glow); }
+.mc-chat-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* SABnzbd download slots */
 .dl-list {
   display: flex;
@@ -413,7 +474,7 @@ body {
     gap: 16px;
   }
   /* Span full width on tablet; overridden at desktop */
-  #card-system, #card-resources, #card-temps, #card-sonarr, #card-plex { grid-column: 1 / -1; }
+  #card-system, #card-resources, #card-temps, #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
   body { font-size: 14px; }
   .rate-value { font-size: 18px; }
 }
@@ -426,7 +487,7 @@ body {
   }
   /* Let system + resources sit in-row; only temps/sonarr/plex stay full-width */
   #card-system, #card-resources { grid-column: auto; }
-  #card-temps, #card-sonarr, #card-plex { grid-column: 1 / -1; }
+  #card-temps, #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
   #temp-canvas { height: 180px; }
 }
 
@@ -441,7 +502,7 @@ body {
   #card-system, #card-resources,
   #card-storage, #card-network,
   #card-sabnzbd, #card-qbittorrent { grid-column: span 2; }
-  #card-temps, #card-sonarr, #card-plex { grid-column: 1 / -1; }
+  #card-temps, #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
   .rate-value { font-size: 20px; }
   #temp-canvas { height: 220px; }
 }

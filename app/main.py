@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -87,6 +87,31 @@ def qbittorrent_stats():
     if result is None:
         return JSONResponse({"error": "QB_PASSWORD not configured"}, status_code=404)
     return result
+
+
+@app.get("/api/minecraft")
+def minecraft_stats():
+    result = stats.get_minecraft()
+    if result is None:
+        return JSONResponse({"error": "MC_HOST not configured"}, status_code=404)
+    return result
+
+
+@app.post("/api/minecraft/chat")
+async def minecraft_chat(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid JSON"}, status_code=400)
+    message = str(body.get("message", "")).strip()
+    if not message:
+        return JSONResponse({"error": "message is empty"}, status_code=400)
+    if len(message) > 100:
+        return JSONResponse({"error": "message too long (max 100 chars)"}, status_code=400)
+    ok, err = stats.send_mc_chat(message)
+    if not ok:
+        return JSONResponse({"error": err}, status_code=500)
+    return {"ok": True}
 
 
 # Serve static frontend from root

@@ -33,7 +33,13 @@ ENV PORT=8090 \
     QB_URL=http://localhost:8080 \
     QB_USERNAME=admin \
     QB_PASSWORD= \
-    QB_API_KEY=
+    QB_API_KEY= \
+    MC_HOST= \
+    MC_PORT=25565 \
+    MC_RCON_PORT=25575 \
+    MC_RCON_PASSWORD= \
+    HTTPS_CERT= \
+    HTTPS_KEY=
 
 # Run as non-root for safety. Mounts /sys and /proc remain readable.
 RUN useradd -r -u 1001 monitor && chown -R monitor:monitor /srv
@@ -42,4 +48,4 @@ USER monitor
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"8080\")}/api/health', timeout=3)" || exit 1
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level ${LOG_LEVEL}"]
+CMD ["sh", "-c", "SSL=''; [ -n \"$HTTPS_CERT\" ] && [ -n \"$HTTPS_KEY\" ] && SSL=\"--ssl-certfile $HTTPS_CERT --ssl-keyfile $HTTPS_KEY\"; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --log-level ${LOG_LEVEL} $SSL"]

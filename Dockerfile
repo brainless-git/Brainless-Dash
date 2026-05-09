@@ -17,9 +17,14 @@ RUN pip install -r requirements.txt \
     && apt-get purge -y gcc \
     && apt-get autoremove -y
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends certbot \
-    && rm -rf /var/lib/apt/lists/*
+# Certbot + common DNS plugins, all in the same Python 3.12 environment.
+# Supported plugins: cloudflare, digitalocean, duckdns.
+# Need another provider? pip install certbot-dns-<provider> into a custom image.
+RUN pip install \
+    certbot \
+    certbot-dns-cloudflare \
+    certbot-dns-digitalocean \
+    certbot-dns-duckdns
 
 COPY app ./app
 COPY entrypoint.sh /entrypoint.sh
@@ -47,6 +52,8 @@ ENV PORT=8090 \
     HTTPS_KEY= \
     ACME_DOMAIN= \
     ACME_EMAIL= \
+    ACME_DNS_PLUGIN= \
+    ACME_DNS_CREDENTIALS= \
     ACME_CHALLENGE_PORT=8180
 
 # Run as non-root. /data/certs is owned by monitor so certbot can write there.

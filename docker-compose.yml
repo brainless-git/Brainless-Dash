@@ -39,7 +39,13 @@ services:
       - HTTPS_CERT=
       - HTTPS_KEY=
       # Automatic Let's Encrypt — set ACME_DOMAIN + ACME_EMAIL to enable.
-      # Forward port 80 on your router → this host:ACME_CHALLENGE_PORT.
+      # DNS-01 challenge (recommended — no port forwarding needed):
+      #   Set ACME_DNS_PLUGIN to: cloudflare | digitalocean | duckdns
+      #   Set ACME_DNS_CREDENTIALS to the path of your credentials file inside the container.
+      #   Mount the credentials file: - /path/to/cloudflare.ini:/data/certs/cloudflare.ini:ro
+      # HTTP-01 challenge (fallback): forward port 80 on your router to host:ACME_CHALLENGE_PORT.
       - ACME_DOMAIN=
       - ACME_EMAIL=
+      - ACME_DNS_PLUGIN=
+      - ACME_DNS_CREDENTIALS=
       - ACME_CHALLENGE_PORT=8180

@@ -57,6 +57,14 @@ def network_stats():
     return stats.get_network()
 
 
+@app.get("/api/sonarr")
+def sonarr_stats():
+    result = stats.get_sonarr_calendar()
+    if result is None:
+        return JSONResponse({"error": "SONARR_API_KEY not configured"}, status_code=404)
+    return result
+
+
 @app.get("/api/plex")
 def plex_stats():
     result = stats.get_plex_sessions()

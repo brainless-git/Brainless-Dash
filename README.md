@@ -82,6 +82,8 @@ docker restart brainless-dash
 | `TZ` | (unset) | IANA timezone (e.g. `Australia/Sydney`, `Europe/London`, `America/New_York`). |
 | `PLEX_URL` | `http://localhost:32400` | URL of the Plex Media Server. Only used when `PLEX_TOKEN` is set. |
 | `PLEX_TOKEN` | (unset) | Plex authentication token. Set this to enable the Plex streams card. Leave empty to disable. |
+| `SONARR_URL` | `http://localhost:8989` | URL of the Sonarr instance. Only used when `SONARR_API_KEY` is set. |
+| `SONARR_API_KEY` | (unset) | Sonarr API key. Set this to enable the upcoming episodes card. Leave empty to disable. |
 
 ## Volumes
 

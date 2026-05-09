@@ -1,7 +1,11 @@
 #!/bin/bash
-# Brainless-Dash entrypoint — optional Let's Encrypt cert acquisition before uvicorn starts.
+# Brainless-Dash entrypoint.
 #
-# Set ACME_DOMAIN + ACME_EMAIL to enable automatic HTTPS.
+# Runs as root so it can write to host-mounted volumes regardless of host
+# directory ownership, then drops to UID 1001 (monitor) via gosu before
+# exec'ing uvicorn.
+#
+# Set ACME_DOMAIN + ACME_EMAIL to enable automatic HTTPS via Let's Encrypt.
 #
 # DNS-01 challenge (recommended — no port forwarding required):
 #   ACME_DNS_PLUGIN       e.g. cloudflare | digitalocean | duckdns
@@ -27,10 +31,15 @@ set -e
 
 CERTDIR=/data/certs
 
+# Ensure the cert storage directory exists and is writable.
+# Running as root means we can always fix ownership of the host-mounted volume.
+mkdir -p "$CERTDIR"
+chown monitor:monitor "$CERTDIR"
+
 if [ -n "$ACME_DOMAIN" ] && [ -n "$ACME_EMAIL" ]; then
     LIVE="$CERTDIR/live/$ACME_DOMAIN"
 
-    mkdir -p /tmp/certbot/work /tmp/certbot/logs "$CERTDIR"
+    mkdir -p /tmp/certbot/work /tmp/certbot/logs
 
     # Build challenge arguments as an array to prevent word-splitting and injection.
     CHALLENGE_ARGS=()
@@ -70,6 +79,9 @@ if [ -n "$ACME_DOMAIN" ] && [ -n "$ACME_EMAIL" ]; then
     fi
 
     if [ -f "$LIVE/fullchain.pem" ]; then
+        # Make cert files readable by monitor (UID 1001) before dropping privileges.
+        chown -R monitor:monitor "$LIVE"
+        chmod 640 "$LIVE/privkey.pem"
         export HTTPS_CERT="$LIVE/fullchain.pem"
         export HTTPS_KEY="$LIVE/privkey.pem"
     else
@@ -84,7 +96,8 @@ if [ -n "$HTTPS_CERT" ] && [ -n "$HTTPS_KEY" ]; then
     echo "[acme] Starting with HTTPS."
 fi
 
-exec uvicorn app.main:app \
+# Drop from root to monitor (UID 1001) for uvicorn.
+exec gosu monitor uvicorn app.main:app \
     --host 0.0.0.0 \
     --port "${PORT:-8090}" \
     --log-level "${LOG_LEVEL:-info}" \

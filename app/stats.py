@@ -1,4 +1,5 @@
 """System statistics collection for Unraid monitoring."""
+import json
 import logging
 import os
 import ssl
@@ -18,6 +19,10 @@ _net_cache = {"time": None, "bytes_sent": 0, "bytes_recv": 0}
 # Plex config
 _PLEX_URL = os.environ.get("PLEX_URL", "http://localhost:32400").rstrip("/")
 _PLEX_TOKEN = os.environ.get("PLEX_TOKEN", "")
+
+# Sonarr config
+_SONARR_URL = os.environ.get("SONARR_URL", "http://localhost:8989").rstrip("/")
+_SONARR_API_KEY = os.environ.get("SONARR_API_KEY", "")
 
 # Chips that expose CPU temperatures
 _CPU_CHIPS = {"k10temp", "coretemp", "zenpower"}
@@ -255,6 +260,51 @@ def get_plex_sessions():
     return {"available": True, "stream_count": len(sessions), "sessions": sessions}
 
 
+def get_sonarr_calendar():
+    """Return episodes airing in the next 5 days, or None if not configured."""
+    if not _SONARR_API_KEY:
+        return None
+    from datetime import date, timedelta
+    today = date.today()
+    end = today + timedelta(days=5)
+    url = (
+        f"{_SONARR_URL}/api/v3/calendar"
+        f"?apikey={_SONARR_API_KEY}"
+        f"&start={today.isoformat()}&end={end.isoformat()}"
+    )
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url), timeout=5) as resp:
+            items = json.loads(resp.read())
+    except Exception as exc:
+        log.warning("Sonarr request failed: %s", exc)
+        return {"available": False, "episodes": [], "error": str(exc)}
+
+    day_labels = {today.isoformat(): "Today", (today + timedelta(days=1)).isoformat(): "Tomorrow"}
+    for i in range(2, 5):
+        d = today + timedelta(days=i)
+        day_labels[d.isoformat()] = d.strftime("%A")
+
+    episodes = []
+    for item in items:
+        air_date = item.get("airDate", "")
+        if not air_date:
+            continue
+        series = item.get("series") or {}
+        show = series.get("title") or item.get("seriesTitle", "")
+        episodes.append({
+            "show": show,
+            "season": item.get("seasonNumber"),
+            "episode": item.get("episodeNumber"),
+            "title": item.get("title", ""),
+            "air_date": air_date,
+            "day_label": day_labels.get(air_date, air_date),
+            "downloaded": bool(item.get("hasFile")),
+        })
+
+    episodes.sort(key=lambda e: (e["air_date"], e["show"]))
+    return {"available": True, "episodes": episodes}
+
+
 def get_uptime():
     return int(time.time() - psutil.boot_time())
 
@@ -282,4 +332,7 @@ def collect_all():
     plex = get_plex_sessions()
     if plex is not None:
         result["plex"] = plex
+    sonarr = get_sonarr_calendar()
+    if sonarr is not None:
+        result["sonarr"] = sonarr
     return result

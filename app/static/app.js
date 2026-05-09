@@ -210,6 +210,65 @@
       ifaceList.appendChild(row);
     });
 
+    // Sonarr
+    const sonarrCard = $('card-sonarr');
+    if (d.sonarr) {
+      sonarrCard.style.display = '';
+      const sonarr = d.sonarr;
+      const list = $('sonarr-list');
+      list.innerHTML = '';
+      if (!sonarr.available) {
+        const msg = sonarr.error ? 'sonarr unavailable: ' + sonarr.error : 'sonarr unavailable';
+        list.innerHTML = '<div class="empty">' + msg + '</div>';
+        $('sonarr-count').textContent = '';
+      } else if (!sonarr.episodes.length) {
+        list.innerHTML = '<div class="empty">no episodes in the next 5 days</div>';
+        $('sonarr-count').textContent = 'nothing upcoming';
+      } else {
+        $('sonarr-count').textContent = sonarr.episodes.length + (sonarr.episodes.length === 1 ? ' episode' : ' episodes');
+        // Group by day
+        const days = [];
+        const dayMap = {};
+        sonarr.episodes.forEach((ep) => {
+          if (!dayMap[ep.air_date]) {
+            dayMap[ep.air_date] = [];
+            days.push(ep.air_date);
+          }
+          dayMap[ep.air_date].push(ep);
+        });
+        days.forEach((date) => {
+          const dayEps = dayMap[date];
+          const dayEl = document.createElement('div');
+          dayEl.className = 'sonarr-day';
+          const label = document.createElement('div');
+          label.className = 'sonarr-day-label';
+          label.textContent = dayEps[0].day_label;
+          dayEl.appendChild(label);
+          dayEps.forEach((ep) => {
+            const epEl = document.createElement('div');
+            epEl.className = 'sonarr-episode';
+            const epNum = 'S' + String(ep.season).padStart(2, '0') + 'E' + String(ep.episode).padStart(2, '0');
+            const badge = ep.downloaded
+              ? '<span class="sonarr-badge downloaded">Downloaded</span>'
+              : '<span class="sonarr-badge upcoming">Upcoming</span>';
+            epEl.innerHTML =
+              '<div class="sonarr-left">' +
+                '<span class="sonarr-show">' + ep.show + '</span>' +
+                '<span class="sonarr-ep-title">' + ep.title + '</span>' +
+              '</div>' +
+              '<div class="sonarr-right">' +
+                '<span class="sonarr-ep-num">' + epNum + '</span>' +
+                badge +
+              '</div>';
+            dayEl.appendChild(epEl);
+          });
+          list.appendChild(dayEl);
+        });
+      }
+    } else {
+      sonarrCard.style.display = 'none';
+    }
+
     // Plex
     const plexCard = $('card-plex');
     if (d.plex) {

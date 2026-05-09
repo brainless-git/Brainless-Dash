@@ -282,7 +282,7 @@ body {
 }
 .rate-value {
   font-family: var(--mono);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--accent);
 }
@@ -297,8 +297,8 @@ body {
   font-family: var(--mono);
   font-size: 11px;
 }
-.iface-item .iface-name { color: var(--text); font-weight: 600; }
-.iface-item .iface-totals { color: var(--text-faint); }
+.iface-item .iface-name { color: var(--text); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iface-item .iface-totals { color: var(--text-faint); white-space: nowrap; flex-shrink: 0; }
 
 .empty {
   color: var(--text-faint);
@@ -307,6 +307,45 @@ body {
   padding: 8px 4px;
   font-style: italic;
 }
+
+/* Sonarr calendar */
+.sonarr-list { display: flex; flex-direction: column; gap: 12px; }
+.sonarr-day-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.sonarr-episode {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.sonarr-episode:last-child { border-bottom: none; }
+.sonarr-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sonarr-show { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sonarr-ep-title { color: var(--text-dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sonarr-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.sonarr-ep-num { color: var(--text-faint); font-size: 10px; }
+.sonarr-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+.sonarr-badge.downloaded { background: rgba(76,175,80,0.15); color: var(--ok); }
+.sonarr-badge.upcoming { background: rgba(255,179,0,0.12); color: var(--warn); }
+.sonarr-day { display: flex; flex-direction: column; gap: 0; }
 
 /* Plex streams */
 .plex-streams {
@@ -361,13 +400,14 @@ body {
     padding: 16px;
     gap: 16px;
   }
-  #card-system, #card-resources, #card-temps, #card-plex { grid-column: 1 / -1; }
+  #card-system, #card-resources, #card-temps, #card-plex, #card-sonarr { grid-column: 1 / -1; }
   body { font-size: 14px; }
+  .rate-value { font-size: 18px; }
 }
 
 @media (min-width: 1000px) {
   .content {
     grid-template-columns: repeat(3, 1fr);
   }
-  #card-system, #card-resources, #card-temps, #card-plex { grid-column: 1 / -1; }
+  #card-system, #card-resources, #card-temps, #card-plex, #card-sonarr { grid-column: 1 / -1; }
 }

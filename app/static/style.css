@@ -138,37 +138,55 @@ body {
 .bar-fill.warn { background: linear-gradient(90deg, var(--warn), #ff8c00); }
 .bar-fill.crit { background: linear-gradient(90deg, var(--crit), var(--accent)); }
 
-/* Per core mini bars */
-.cores {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-  gap: 6px;
-  margin-top: 12px;
+/* Resources card (CPU + Memory) */
+.resource-section {
+  margin-bottom: 10px;
 }
-.core {
-  background: var(--bg);
-  border: 1px solid var(--border-soft);
-  border-radius: 2px;
-  padding: 4px 6px;
-  font-family: var(--mono);
-  font-size: 10px;
+.resource-label {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 5px;
+  font-family: var(--mono);
+  font-size: 12px;
 }
-.core .core-label { color: var(--text-faint); font-size: 9px; }
-.core .core-value { color: var(--text); }
-.core .core-bar {
-  height: 3px;
-  background: #111;
-  border-radius: 1px;
-  overflow: hidden;
+.resource-name {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.08em;
 }
-.core .core-bar-fill {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
+.resource-value { color: var(--text); }
+
+/* Temperature graph */
+#temp-canvas {
+  width: 100%;
+  height: 140px;
+  display: block;
+  margin-bottom: 10px;
 }
+.temp-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.temp-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.temp-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.temp-legend-label { color: var(--text-dim); }
+.temp-legend-value { color: var(--text); font-weight: 600; }
+.temp-legend-value.warn { color: var(--warn); }
+.temp-legend-value.crit { color: var(--crit); }
 
 /* Key/value rows */
 .kv-grid {
@@ -343,7 +361,7 @@ body {
     padding: 16px;
     gap: 16px;
   }
-  #card-system, #card-cpu, #card-plex { grid-column: 1 / -1; }
+  #card-system, #card-resources, #card-temps, #card-plex { grid-column: 1 / -1; }
   body { font-size: 14px; }
 }
 
@@ -351,5 +369,5 @@ body {
   .content {
     grid-template-columns: repeat(3, 1fr);
   }
-  #card-system, #card-cpu, #card-plex { grid-column: 1 / -1; }
+  #card-system, #card-resources, #card-temps, #card-plex { grid-column: 1 / -1; }
 }

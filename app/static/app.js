@@ -5,7 +5,7 @@
   const $ = (id) => document.getElementById(id);
 
   function fmtBytes(n) {
-    if (n === null || n === undefined || isNaN(n)) return ',';
+    if (n === null || n === undefined || isNaN(n)) return '—';
     const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
     let i = 0;
     let v = Number(n);
@@ -42,6 +42,77 @@
     return '';
   }
 
+  // Temperature graph state
+  const TEMP_COLORS = ['#e22828', '#4caf50', '#2196f3', '#ff9800', '#9c27b0', '#00bcd4', '#ff5722'];
+  const TEMP_HISTORY_MAX = 60;
+  const tempHistory = [];
+
+  function drawTempGraph(sensors) {
+    const canvas = $('temp-canvas');
+    if (!canvas || !canvas.getContext) return;
+
+    // Push snapshot into history
+    tempHistory.push(sensors.map(s => ({ label: s.label, current: s.current })));
+    if (tempHistory.length > TEMP_HISTORY_MAX) tempHistory.shift();
+
+    // Match canvas pixel width to its CSS width
+    const cssW = canvas.getBoundingClientRect().width;
+    if (cssW > 0 && canvas.width !== Math.round(cssW)) canvas.width = Math.round(cssW);
+
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    if (tempHistory.length < 2 || sensors.length === 0) return;
+
+    // Y range across all history
+    let minT = Infinity, maxT = -Infinity;
+    tempHistory.forEach(frame => frame.forEach(s => {
+      if (s.current < minT) minT = s.current;
+      if (s.current > maxT) maxT = s.current;
+    }));
+    minT = Math.max(0, minT - 5);
+    maxT = maxT + 5;
+    const range = maxT - minT || 1;
+
+    const toX = (fi) => (fi / (TEMP_HISTORY_MAX - 1)) * w;
+    const toY = (t) => h - 2 - ((t - minT) / range) * (h - 10);
+
+    // Horizontal grid lines
+    const step = range > 40 ? 20 : range > 20 ? 10 : 5;
+    const firstGrid = Math.ceil(minT / step) * step;
+    for (let t = firstGrid; t <= maxT; t += step) {
+      const y = Math.round(toY(t)) + 0.5;
+      ctx.strokeStyle = '#2e2e2e';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.fillStyle = '#555';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(t + '°', 3, y - 2);
+    }
+
+    // One line per sensor
+    const offset = TEMP_HISTORY_MAX - tempHistory.length;
+    sensors.forEach((sensor, si) => {
+      ctx.strokeStyle = TEMP_COLORS[si % TEMP_COLORS.length];
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      let started = false;
+      tempHistory.forEach((frame, fi) => {
+        const s = frame.find(f => f.label === sensor.label);
+        if (!s) return;
+        const x = toX(offset + fi);
+        const y = toY(s.current);
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+      });
+      if (started) ctx.stroke();
+    });
+  }
+
   function render(d) {
     // Header
     $('hostname').textContent = d.hostname || 'unknown';
@@ -54,7 +125,7 @@
     $('load15').textContent = d.cpu.load_15m.toFixed(2);
     $('cores').textContent = d.cpu.cores + ' / ' + d.cpu.threads + 't';
 
-    // CPU
+    // Resources — CPU
     const cpuPct = d.cpu.percent;
     $('cpu-percent').textContent = cpuPct.toFixed(0);
     $('cpu-freq').textContent = d.cpu.freq_mhz ? '@ ' + (d.cpu.freq_mhz / 1000).toFixed(2) + ' GHz' : '';
@@ -62,19 +133,7 @@
     cpuBar.style.width = cpuPct + '%';
     cpuBar.className = 'bar-fill ' + barClass(cpuPct);
 
-    const coresEl = $('cpu-cores');
-    coresEl.innerHTML = '';
-    d.cpu.per_cpu.forEach((p, i) => {
-      const div = document.createElement('div');
-      div.className = 'core';
-      div.innerHTML =
-        '<div class="core-label">CPU' + i + '</div>' +
-        '<div class="core-value">' + p.toFixed(0) + '%</div>' +
-        '<div class="core-bar"><div class="core-bar-fill" style="width:' + p + '%"></div></div>';
-      coresEl.appendChild(div);
-    });
-
-    // Memory
+    // Resources — Memory
     const m = d.memory;
     $('mem-used').textContent = fmtBytes(m.used);
     $('mem-total').textContent = fmtBytes(m.total);
@@ -85,23 +144,28 @@
     $('swap').textContent = m.swap_total > 0
       ? fmtBytes(m.swap_used) + ' / ' + fmtBytes(m.swap_total) + ' (' + m.swap_percent.toFixed(0) + '%)'
       : 'none';
+    $('resource-meta').textContent = 'CPU ' + cpuPct.toFixed(0) + '% · MEM ' + m.percent.toFixed(0) + '%';
 
-    // Temperatures
-    const tList = $('temp-list');
-    tList.innerHTML = '';
-    if (!d.temps || d.temps.length === 0) {
-      tList.innerHTML = '<div class="empty">no sensors detected (mount /sys in container)</div>';
-      $('temp-count').textContent = '0';
+    // Temperatures — line graph + legend
+    const temps = d.temps || [];
+    if (temps.length === 0) {
+      $('temp-count').textContent = '0 sensors';
+      $('temp-legend').innerHTML = '<div class="empty">no sensors detected (mount /sys in container)</div>';
     } else {
-      $('temp-count').textContent = d.temps.length + ' sensors';
-      d.temps.forEach((s) => {
+      $('temp-count').textContent = temps.length + (temps.length === 1 ? ' sensor' : ' sensors');
+      drawTempGraph(temps);
+      const legend = $('temp-legend');
+      legend.innerHTML = '';
+      temps.forEach((s, si) => {
+        const color = TEMP_COLORS[si % TEMP_COLORS.length];
         const cls = tempClass(s.current, s.high, s.critical);
-        const row = document.createElement('div');
-        row.className = 'temp-item ' + cls;
-        row.innerHTML =
-          '<span class="label">' + s.label + '</span>' +
-          '<span class="value">' + s.current.toFixed(1) + '°C</span>';
-        tList.appendChild(row);
+        const item = document.createElement('div');
+        item.className = 'temp-legend-item';
+        item.innerHTML =
+          '<span class="temp-legend-dot" style="background:' + color + '"></span>' +
+          '<span class="temp-legend-label">' + s.label + '</span>' +
+          '<span class="temp-legend-value ' + cls + '">' + s.current.toFixed(1) + '°C</span>';
+        legend.appendChild(item);
       });
     }
 

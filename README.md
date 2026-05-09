@@ -80,6 +80,8 @@ docker restart brainless-dash
 | `REFRESH_MS` | `2000` | Frontend poll interval in milliseconds. Minimum enforced: 500. |
 | `LOG_LEVEL` | `info` | Uvicorn log level. One of: `critical`, `error`, `warning`, `info`, `debug`, `trace`. |
 | `TZ` | (unset) | IANA timezone (e.g. `Australia/Sydney`, `Europe/London`, `America/New_York`). |
+| `PLEX_URL` | `http://localhost:32400` | URL of the Plex Media Server. Only used when `PLEX_TOKEN` is set. |
+| `PLEX_TOKEN` | (unset) | Plex authentication token. Set this to enable the Plex streams card. Leave empty to disable. |
 
 ## Volumes
 

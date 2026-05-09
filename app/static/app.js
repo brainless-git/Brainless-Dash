@@ -146,6 +146,38 @@
       ifaceList.appendChild(row);
     });
 
+    // Plex
+    const plexCard = $('card-plex');
+    if (d.plex) {
+      plexCard.style.display = '';
+      const plex = d.plex;
+      $('plex-count').textContent = plex.stream_count === 1 ? '1 stream' : plex.stream_count + ' streams';
+      const streamList = $('plex-streams');
+      streamList.innerHTML = '';
+      if (!plex.available) {
+        streamList.innerHTML = '<div class="empty">plex unavailable</div>';
+      } else if (!plex.sessions.length) {
+        streamList.innerHTML = '<div class="empty">no active streams</div>';
+      } else {
+        plex.sessions.forEach((s) => {
+          const item = document.createElement('div');
+          item.className = 'plex-session';
+          const heading = s.show ? s.show + ' — ' + s.title : s.title;
+          const pausedBadge = s.state === 'paused' ? ' <span class="plex-paused">(paused)</span>' : '';
+          const streamBadge = s.transcoding
+            ? '<span class="plex-transcode">transcoding</span>'
+            : '<span class="plex-direct">direct play</span>';
+          item.innerHTML =
+            '<div class="plex-title">' + heading + pausedBadge + '</div>' +
+            '<div class="plex-meta"><span>' + s.user + ' · ' + s.player + '</span>' + streamBadge + '</div>' +
+            '<div class="bar"><div class="bar-fill" style="width:' + s.progress_pct + '%"></div></div>';
+          streamList.appendChild(item);
+        });
+      }
+    } else {
+      plexCard.style.display = 'none';
+    }
+
     // Footer
     const t = new Date();
     $('last-update').textContent = t.toLocaleTimeString();

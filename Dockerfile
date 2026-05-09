@@ -23,7 +23,9 @@ EXPOSE 8080
 
 ENV PORT=8080 \
     REFRESH_MS=2000 \
-    LOG_LEVEL=info
+    LOG_LEVEL=info \
+    PLEX_URL=http://localhost:32400 \
+    PLEX_TOKEN=
 
 # Run as non-root for safety. Mounts /sys and /proc remain readable.
 RUN useradd -r -u 1001 monitor && chown -R monitor:monitor /srv

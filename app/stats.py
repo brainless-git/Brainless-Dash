@@ -1,11 +1,15 @@
 """System statistics collection for Unraid monitoring."""
+import logging
 import os
+import ssl
 import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 import psutil
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 # Cache for network rate calculation
@@ -218,11 +222,17 @@ def get_plex_sessions():
         return None
     url = f"{_PLEX_URL}/status/sessions?X-Plex-Token={_PLEX_TOKEN}"
     req = urllib.request.Request(url, headers={"X-Plex-Token": _PLEX_TOKEN})
+    # Allow self-signed certs for local Plex installs using HTTPS
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
     try:
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            root = ET.fromstring(resp.read())
-    except Exception:
-        return {"available": False, "stream_count": 0, "sessions": []}
+        with urllib.request.urlopen(req, timeout=5, context=ssl_ctx) as resp:
+            raw = resp.read()
+        root = ET.fromstring(raw)
+    except Exception as exc:
+        log.warning("Plex request failed: %s", exc)
+        return {"available": False, "stream_count": 0, "sessions": [], "error": str(exc)}
 
     sessions = []
     for item in root.findall("Video") + root.findall("Track") + root.findall("Photo"):

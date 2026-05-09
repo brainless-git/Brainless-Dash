@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
   <img src="https://img.shields.io/badge/docker-ready-2496ED.svg" alt="Docker ready">
   <img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python 3.12">
-  <img src="https://img.shields.io/badge/repo-private-lightgrey.svg" alt="Private repo">
+  <img src="https://img.shields.io/badge/repo-public-brightgreen.svg" alt="Public repo">
 </p>
 
 ---
@@ -37,7 +37,7 @@ A lightweight, mobile-first web dashboard for monitoring an Unraid server. Runs 
 
 ## Quick start
 
-This is a private repo, so the container is built locally on the Unraid host rather than pulled from a registry.
+The container is built locally on the Unraid host rather than pulled from a registry.
 
 ```sh
 git clone https://github.com/brainless-git/brainless-dash.git /mnt/user/appdata/brainless-dash

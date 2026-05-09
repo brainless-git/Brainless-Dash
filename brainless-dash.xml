@@ -1,15 +1,15 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>brainless-dash</Name>
-  <Repository>brainless-dash:latest</Repository>
-  <Registry/>
+  <Repository>brainless86/brainless-dash:latest</Repository>
+  <Registry>https://hub.docker.com/</Registry>
   <Network>host</Network>
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
   <Support/>
   <Project/>
-  <Overview>Brainless-Dash: a lightweight, mobile-first Unraid dashboard. CPU, memory, temperatures, storage capacity per array disk and live network bandwidth. Read-only, runs as non-root, no privileged mode. Built locally from a private repo.</Overview>
+  <Overview>Brainless-Dash: a lightweight, mobile-first Unraid dashboard. CPU, memory, temperatures, storage capacity per array disk and live network bandwidth. Read-only, runs as non-root, no privileged mode.</Overview>
   <Category>Tools: Status: Network:Management</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL/>

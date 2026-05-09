@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/docker-ready-2496ED.svg" alt="Docker ready">
   <img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python 3.12">
   <img src="https://img.shields.io/badge/repo-public-brightgreen.svg" alt="Public repo">
+  <img src="https://img.shields.io/docker/pulls/brainless86/brainless-dash.svg" alt="Docker pulls">
 </p>
 
 ---
@@ -37,22 +38,38 @@ A lightweight, mobile-first web dashboard for monitoring an Unraid server. Runs 
 
 ## Quick start
 
-Run these commands in an Unraid terminal (via the web UI or SSH):
+### Via Unraid GUI (no terminal required)
+
+1. In the Unraid web UI go to **Docker** > **Add Container**
+2. Set **Repository** to `brainless86/brainless-dash:latest`
+3. Set **Network Type** to `Host` and add `--pid=host` to **Extra Parameters**
+4. Add the path mappings and environment variables from the tables below
+5. Click **Apply**
+
+See [Installing on Unraid](#installing-on-unraid) for the full field-by-field walkthrough and the pre-configured XML template option.
+
+### Via terminal
 
 ```sh
-git clone https://github.com/brainless-git/brainless-dash.git /mnt/user/appdata/brainless-dash
-cd /mnt/user/appdata/brainless-dash
-docker compose up -d --build
+docker run -d \
+  --name brainless-dash \
+  --network host \
+  --pid host \
+  --restart unless-stopped \
+  -v /sys:/sys:ro \
+  -v /proc:/proc:ro \
+  -v /mnt:/mnt:ro \
+  -e TZ=Australia/Sydney \
+  brainless86/brainless-dash:latest
 ```
 
 Open `http://<unraid-ip>:8080` from any device on the LAN.
 
-To update to the latest version:
+To update to the latest image:
 
 ```sh
-cd /mnt/user/appdata/brainless-dash
-git pull
-docker compose up -d --build
+docker pull brainless86/brainless-dash:latest
+docker restart brainless-dash
 ```
 
 ## Environment variables
@@ -86,41 +103,38 @@ Privileged mode is **not** required. The container runs as UID 1001.
 
 ## Installing on Unraid
 
-### Option A: Docker Compose (simplest)
+### Option A: Add Container manually
 
-Clone the repo and run `docker compose up -d --build` as shown in the Quick start section above. The container will appear in the Unraid Docker tab like any other.
-
-### Option B: Manual Docker template via the Unraid UI
-
-In the Unraid web UI, go to **Docker** > **Add Container** and use these settings:
+In the Unraid web UI go to **Docker** > **Add Container** and fill in:
 
 | Field | Value |
 |-------|-------|
 | Name | `brainless-dash` |
-| Repository | `brainless-dash:latest` |
-| Network Type | `host` |
+| Repository | `brainless86/brainless-dash:latest` |
+| Network Type | `Host` |
 | Privileged | No |
 | Extra Parameters | `--pid=host` |
 | WebUI | `http://[IP]:[PORT:8080]/` |
 
-Add the three read-only path mappings (`/sys`, `/proc`, `/mnt`) and the four environment variables from the tables above.
+Add the 3 path mappings and 4 environment variables from the tables above. Click **Apply** and Unraid will pull the image automatically.
 
-### Option C: User template XML
+### Option B: User template XML
 
-The repo includes `brainless-dash.xml`, a Docker user template. After cloning the repo:
+The repo includes `brainless-dash.xml`, a pre-configured Docker user template. Copy it to the Unraid USB stick from an Unraid terminal:
 
 ```sh
-cp /mnt/user/appdata/brainless-dash/brainless-dash.xml \
-   /boot/config/plugins/dockerMan/templates-user/my-brainless-dash.xml
+curl -o /boot/config/plugins/dockerMan/templates-user/my-brainless-dash.xml \
+  https://raw.githubusercontent.com/brainless-git/brainless-dash/main/brainless-dash.xml
 ```
 
-Then in the Unraid web UI go to **Docker** > **Add Container** and pick the `brainless-dash` template from the dropdown. All variables and paths are pre-configured.
+Then in the Unraid web UI go to **Docker** > **Add Container** and pick `brainless-dash` from the template dropdown. All fields are pre-filled. Click **Apply** to pull and start.
 
-Build the image before starting the container:
+### Option C: Docker Compose (terminal)
 
 ```sh
-cd /mnt/user/appdata/brainless-dash
-docker compose build
+curl -o docker-compose.yml \
+  https://raw.githubusercontent.com/brainless-git/brainless-dash/main/docker-compose.yml
+docker compose up -d
 ```
 
 ## API endpoints

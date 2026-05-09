@@ -1,7 +1,6 @@
 services:
   brainless-dash:
-    build: .
-    image: brainless-dash:latest
+    image: brainless86/brainless-dash:latest
     container_name: brainless-dash
     restart: unless-stopped
     # Host network gives accurate per-interface bandwidth on the host NICs.

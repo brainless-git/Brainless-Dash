@@ -82,7 +82,7 @@ brainless-dash/
 
 ## Repo
 
-Public GitHub repo: `brainless-git/brainless-dash`. Image is built locally on the Unraid host, never pushed to a public registry.
+Public GitHub repo: `brainless-git/brainless-dash`. Image is published to Docker Hub as `brainless86/brainless-dash` via GitHub Actions on every push to `main`.
 
 ## Out of scope
 

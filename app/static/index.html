@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1c1c1c">
+<title>Brainless-Dash</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 100 110" aria-hidden="true">
+      <path d="M 0 50 C 0 -5, 100 -5, 100 50 L 100 100 C 94 110, 84 105, 78 95 C 71 108, 58 108, 52 95 C 45 108, 32 108, 26 95 C 20 105, 6 110, 0 100 Z" fill="#e22828"/>
+      <ellipse cx="32" cy="56" rx="9" ry="13" fill="#ffffff"/>
+      <ellipse cx="70" cy="56" rx="9" ry="13" fill="#ffffff"/>
+      <circle cx="35" cy="60" r="4" fill="#1c1c1c"/>
+      <circle cx="73" cy="60" r="4" fill="#1c1c1c"/>
+      <circle cx="36" cy="57" r="1.4" fill="#ffffff"/>
+      <circle cx="74" cy="57" r="1.4" fill="#ffffff"/>
+    </svg>
+    <span class="brand-name">BRAINLESS<span class="brand-accent">-DASH</span></span>
+  </div>
+  <div class="status">
+    <span id="status-dot" class="dot dot-off"></span>
+    <span id="hostname">connecting</span>
+  </div>
+</header>
+
+<main class="content">
+
+  <section class="card" id="card-system">
+    <div class="card-head">
+      <h2>System</h2>
+      <span class="meta" id="uptime">,</span>
+    </div>
+    <div class="kv-grid">
+      <div class="kv"><span class="k">Load 1m</span><span class="v" id="load1">,</span></div>
+      <div class="kv"><span class="k">Load 5m</span><span class="v" id="load5">,</span></div>
+      <div class="kv"><span class="k">Load 15m</span><span class="v" id="load15">,</span></div>
+      <div class="kv"><span class="k">Cores</span><span class="v" id="cores">,</span></div>
+    </div>
+  </section>
+
+  <section class="card" id="card-cpu">
+    <div class="card-head">
+      <h2>CPU</h2>
+      <span class="meta"><span id="cpu-percent">0</span>% <span class="meta-dim" id="cpu-freq"></span></span>
+    </div>
+    <div class="bar"><div class="bar-fill" id="cpu-bar"></div></div>
+    <div class="cores" id="cpu-cores"></div>
+  </section>
+
+  <section class="card" id="card-mem">
+    <div class="card-head">
+      <h2>Memory</h2>
+      <span class="meta"><span id="mem-used">0</span> / <span id="mem-total">0</span></span>
+    </div>
+    <div class="bar"><div class="bar-fill" id="mem-bar"></div></div>
+    <div class="kv-row">
+      <div class="kv"><span class="k">Available</span><span class="v" id="mem-available">,</span></div>
+      <div class="kv"><span class="k">Swap</span><span class="v" id="swap">,</span></div>
+    </div>
+  </section>
+
+  <section class="card" id="card-temps">
+    <div class="card-head">
+      <h2>Temperatures</h2>
+      <span class="meta" id="temp-count">,</span>
+    </div>
+    <div class="temp-list" id="temp-list">
+      <div class="empty">Reading sensors,</div>
+    </div>
+  </section>
+
+  <section class="card" id="card-storage">
+    <div class="card-head">
+      <h2>Storage</h2>
+      <span class="meta" id="storage-summary">,</span>
+    </div>
+    <div class="disk-list" id="disk-list">
+      <div class="empty">Scanning mounts,</div>
+    </div>
+  </section>
+
+  <section class="card" id="card-network">
+    <div class="card-head">
+      <h2>Network</h2>
+      <span class="meta" id="net-iface-count">,</span>
+    </div>
+    <div class="net-rates">
+      <div class="rate">
+        <div class="rate-label">↓ Down</div>
+        <div class="rate-value" id="net-down">0 B/s</div>
+      </div>
+      <div class="rate">
+        <div class="rate-label">↑ Up</div>
+        <div class="rate-value" id="net-up">0 B/s</div>
+      </div>
+    </div>
+    <div class="iface-list" id="iface-list"></div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <span>refresh <span id="refresh-rate">2s</span></span>
+  <span>•</span>
+  <span id="last-update">—</span>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

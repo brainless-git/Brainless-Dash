@@ -1,0 +1,22 @@
+services:
+  brainless-dash:
+    build: .
+    image: brainless-dash:latest
+    container_name: brainless-dash
+    restart: unless-stopped
+    # Host network gives accurate per-interface bandwidth on the host NICs.
+    # If you prefer bridged networking, comment network_mode and add:
+    #   ports:
+    #     - "8080:8080"
+    network_mode: host
+    pid: host
+    # Read-only mounts so the container can read host metrics without write access.
+    volumes:
+      - /sys:/sys:ro
+      - /proc:/proc:ro
+      - /mnt:/mnt:ro
+    environment:
+      - TZ=Australia/Sydney
+      - PORT=8080
+      - REFRESH_MS=2000
+      - LOG_LEVEL=info

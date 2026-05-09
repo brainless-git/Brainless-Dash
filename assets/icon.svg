@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Brainless-Dash">
+  <title>Brainless-Dash</title>
+  <desc>A red ghost mascot with motion lines, dashing forward</desc>
+  <g>
+    <line x1="20" y1="100" x2="80" y2="100" stroke="#e22828" stroke-width="6" stroke-linecap="round" opacity="0.25"/>
+    <line x1="14" y1="130" x2="76" y2="130" stroke="#e22828" stroke-width="6" stroke-linecap="round" opacity="0.45"/>
+    <line x1="22" y1="160" x2="84" y2="160" stroke="#e22828" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+  </g>
+  <g>
+    <path d="
+      M 100 110
+      C 100 50, 220 50, 220 110
+      L 220 200
+      C 212 215, 200 208, 192 195
+      C 184 210, 168 210, 160 195
+      C 152 210, 136 210, 128 195
+      C 120 210, 108 215, 100 200
+      Z
+    " fill="#e22828"/>
+    <ellipse cx="138" cy="120" rx="14" ry="18" fill="#ffffff"/>
+    <ellipse cx="186" cy="120" rx="14" ry="18" fill="#ffffff"/>
+    <circle cx="142" cy="124" r="6" fill="#1c1c1c"/>
+    <circle cx="190" cy="124" r="6" fill="#1c1c1c"/>
+    <circle cx="144" cy="121" r="2" fill="#ffffff"/>
+    <circle cx="192" cy="121" r="2" fill="#ffffff"/>
+    <path d="M 145 160 Q 162 175 179 160" stroke="#1c1c1c" stroke-width="3" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>

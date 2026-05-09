@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Brainless-Dash">
+  <path d="
+    M 8 28
+    C 8 10, 56 10, 56 28
+    L 56 56
+    C 52 60, 47 58, 44 53
+    C 41 58, 35 58, 32 53
+    C 29 58, 23 58, 20 53
+    C 17 58, 12 60, 8 56
+    Z
+  " fill="#e22828"/>
+  <ellipse cx="22" cy="30" rx="4" ry="5" fill="#ffffff"/>
+  <ellipse cx="42" cy="30" rx="4" ry="5" fill="#ffffff"/>
+  <circle cx="23.5" cy="32" r="2" fill="#1c1c1c"/>
+  <circle cx="43.5" cy="32" r="2" fill="#1c1c1c"/>
+</svg>

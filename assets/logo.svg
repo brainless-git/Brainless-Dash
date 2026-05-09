@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 220" role="img" aria-label="Brainless-Dash">
+  <title>Brainless-Dash</title>
+  <desc>Ghost mascot dashing forward beside the wordmark BRAINLESS-DASH</desc>
+  <style>
+    .wm-brainless { font: 700 56px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #e22828; letter-spacing: -1px; }
+    .wm-dash      { font: 700 56px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #888; letter-spacing: -1px; }
+    .tagline      { font: 600 14px ui-monospace, "SF Mono", Menlo, Consolas, monospace; fill: #888; letter-spacing: 0.25em; }
+    @media (prefers-color-scheme: dark) {
+      .wm-dash { fill: #e8e8e8; }
+      .tagline { fill: #9a9a9a; }
+    }
+  </style>
+  <g transform="translate(20, 20)">
+    <line x1="0" y1="50"  x2="60" y2="50"  stroke="#e22828" stroke-width="5" stroke-linecap="round" opacity="0.25"/>
+    <line x1="0" y1="80"  x2="60" y2="80"  stroke="#e22828" stroke-width="5" stroke-linecap="round" opacity="0.45"/>
+    <line x1="0" y1="110" x2="60" y2="110" stroke="#e22828" stroke-width="5" stroke-linecap="round" opacity="0.7"/>
+  </g>
+  <g transform="translate(80, 20)">
+    <path d="
+      M 0 60
+      C 0 0, 120 0, 120 60
+      L 120 150
+      C 112 165, 100 158, 92 145
+      C 84 160, 68 160, 60 145
+      C 52 160, 36 160, 28 145
+      C 20 160, 8 165, 0 150
+      Z
+    " fill="#e22828"/>
+    <ellipse cx="38" cy="70" rx="12" ry="16" fill="#ffffff"/>
+    <ellipse cx="86" cy="70" rx="12" ry="16" fill="#ffffff"/>
+    <circle cx="42" cy="74" r="5" fill="#1c1c1c"/>
+    <circle cx="90" cy="74" r="5" fill="#1c1c1c"/>
+    <circle cx="44" cy="71" r="1.6" fill="#ffffff"/>
+    <circle cx="92" cy="71" r="1.6" fill="#ffffff"/>
+    <path d="M 45 110 Q 60 122 75 110" stroke="#1c1c1c" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  </g>
+  <g transform="translate(230, 0)">
+    <text x="0" y="115" class="wm-brainless">BRAINLESS</text>
+    <text x="0" y="170" class="wm-dash">— DASH</text>
+    <text x="2" y="195" class="tagline">UNRAID  MONITOR</text>
+  </g>
+</svg>

@@ -63,7 +63,7 @@ docker run -d \
   brainless86/brainless-dash:latest
 ```
 
-Open `http://<unraid-ip>:8080` from any device on the LAN.
+Open `http://<unraid-ip>:8090` from any device on the LAN.
 
 To update to the latest image:
 
@@ -76,7 +76,7 @@ docker restart brainless-dash
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8080` | TCP port the dashboard listens on. With host networking this is the host port directly. |
+| `PORT` | `8090` | TCP port the dashboard listens on. With host networking this is the host port directly. |
 | `REFRESH_MS` | `2000` | Frontend poll interval in milliseconds. Minimum enforced: 500. |
 | `LOG_LEVEL` | `info` | Uvicorn log level. One of: `critical`, `error`, `warning`, `info`, `debug`, `trace`. |
 | `TZ` | (unset) | IANA timezone (e.g. `Australia/Sydney`, `Europe/London`, `America/New_York`). |
@@ -116,7 +116,7 @@ In the Unraid web UI go to **Docker** > **Add Container** and fill in:
 | Network Type | `Host` |
 | Privileged | No |
 | Extra Parameters | `--pid=host` |
-| WebUI | `http://[IP]:[PORT:8080]/` |
+| WebUI | `http://[IP]:[PORT:8090]/` |
 
 Add the 3 path mappings and 4 environment variables from the tables above. Click **Apply** and Unraid will pull the image automatically.
 
@@ -162,17 +162,17 @@ All responses are JSON.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8080
+uvicorn app.main:app --reload --port 8090
 ```
 
-Open `http://localhost:8080`. Note that on macOS or Windows, temperature sensors and Unraid mounts will not be present; storage will fall back to whatever real partitions psutil discovers.
+Open `http://localhost:8090`. Note that on macOS or Windows, temperature sensors and Unraid mounts will not be present; storage will fall back to whatever real partitions psutil discovers.
 
 ## Notes and limitations
 
 - Temperatures depend on the host kernel exposing hwmon entries. If `/api/temps` returns an empty list, install the **Dynamix System Temperature** plugin on Unraid and confirm `/sys/class/hwmon` is populated.
 - Network rate is computed from a delta between successive polls. The first reading after container start will show `0 B/s`.
 - The container uses `network_mode: host`, so the `PORT` env var is the host port directly. There is no separate port mapping.
-- Default port is `8080`. Change `PORT` in your environment if it conflicts with another service.
+- Default port is `8090`. Change `PORT` in your environment if it conflicts with another service.
 - This is a read-only monitoring tool. It cannot start, stop or modify anything on the host.
 
 ## License

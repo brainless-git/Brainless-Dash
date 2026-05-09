@@ -19,9 +19,9 @@ RUN pip install -r requirements.txt \
 
 COPY app ./app
 
-EXPOSE 8080
+EXPOSE 8090
 
-ENV PORT=8080 \
+ENV PORT=8090 \
     REFRESH_MS=2000 \
     LOG_LEVEL=info \
     PLEX_URL=http://localhost:32400 \

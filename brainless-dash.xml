@@ -11,7 +11,7 @@
   <Project/>
   <Overview>Brainless-Dash: a lightweight, mobile-first Unraid dashboard. CPU, memory, temperatures, storage capacity per array disk and live network bandwidth. Read-only, runs as non-root, no privileged mode.</Overview>
   <Category>Tools: Status: Network:Management</Category>
-  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <WebUI>http://[IP]:[PORT:8090]/</WebUI>
   <TemplateURL/>
   <Icon/>
   <ExtraParams>--pid=host</ExtraParams>
@@ -21,7 +21,7 @@
   <DonateText/>
   <DonateLink/>
   <Requires/>
-  <Config Name="WebUI Port" Target="PORT" Default="8080" Mode="" Description="Port the dashboard listens on. Note: with host networking, this is the host port directly." Type="Variable" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="WebUI Port" Target="PORT" Default="8090" Mode="" Description="Port the dashboard listens on. Note: with host networking, this is the host port directly." Type="Variable" Display="always" Required="true" Mask="false">8090</Config>
   <Config Name="Refresh Interval (ms)" Target="REFRESH_MS" Default="2000" Mode="" Description="How often the dashboard polls for new stats, in milliseconds. Minimum 500." Type="Variable" Display="always" Required="false" Mask="false">2000</Config>
   <Config Name="Log Level" Target="LOG_LEVEL" Default="info" Mode="" Description="Uvicorn log level: critical, error, warning, info, debug, trace." Type="Variable" Display="advanced" Required="false" Mask="false">info</Config>
   <Config Name="Timezone" Target="TZ" Default="Australia/Sydney" Mode="" Description="System timezone (IANA format, e.g. Australia/Sydney, Europe/London, America/New_York)." Type="Variable" Display="always" Required="false" Mask="false">Australia/Sydney</Config>

@@ -37,7 +37,7 @@ A lightweight, mobile-first web dashboard for monitoring an Unraid server. Runs 
 
 ## Quick start
 
-The container is built locally on the Unraid host rather than pulled from a registry.
+Run these commands in an Unraid terminal (via the web UI or SSH):
 
 ```sh
 git clone https://github.com/brainless-git/brainless-dash.git /mnt/user/appdata/brainless-dash
@@ -47,7 +47,7 @@ docker compose up -d --build
 
 Open `http://<unraid-ip>:8080` from any device on the LAN.
 
-To update later:
+To update to the latest version:
 
 ```sh
 cd /mnt/user/appdata/brainless-dash
@@ -88,7 +88,7 @@ Privileged mode is **not** required. The container runs as UID 1001.
 
 ### Option A: Docker Compose (simplest)
 
-The `docker compose up -d --build` command above is all you need on a stock Unraid box. The container will appear in the Docker tab of the Unraid web UI like any other.
+Clone the repo and run `docker compose up -d --build` as shown in the Quick start section above. The container will appear in the Unraid Docker tab like any other.
 
 ### Option B: Manual Docker template via the Unraid UI
 
@@ -97,7 +97,7 @@ In the Unraid web UI, go to **Docker** > **Add Container** and use these setting
 | Field | Value |
 |-------|-------|
 | Name | `brainless-dash` |
-| Repository | `brainless-dash:latest` (built locally, so use this image name) |
+| Repository | `brainless-dash:latest` |
 | Network Type | `host` |
 | Privileged | No |
 | Extra Parameters | `--pid=host` |
@@ -107,9 +107,21 @@ Add the three read-only path mappings (`/sys`, `/proc`, `/mnt`) and the four env
 
 ### Option C: User template XML
 
-The repo includes `brainless-dash.xml`, a Docker user template. Copy it to `/boot/config/plugins/dockerMan/templates-user/my-brainless-dash.xml` on the Unraid USB stick, then go to **Docker** > **Add Container** and pick the `brainless-dash` template from the dropdown. All variables and paths are pre-configured.
+The repo includes `brainless-dash.xml`, a Docker user template. After cloning the repo:
 
-> Note: this template targets a locally built image (`brainless-dash:latest`). Build the image first with `docker compose build` (or `docker build -t brainless-dash:latest .`) before adding the container from the template.
+```sh
+cp /mnt/user/appdata/brainless-dash/brainless-dash.xml \
+   /boot/config/plugins/dockerMan/templates-user/my-brainless-dash.xml
+```
+
+Then in the Unraid web UI go to **Docker** > **Add Container** and pick the `brainless-dash` template from the dropdown. All variables and paths are pre-configured.
+
+Build the image before starting the container:
+
+```sh
+cd /mnt/user/appdata/brainless-dash
+docker compose build
+```
 
 ## API endpoints
 

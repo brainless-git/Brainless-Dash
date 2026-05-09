@@ -1,9 +1,9 @@
 """System statistics collection for Unraid monitoring."""
-import json
 import os
 import time
 import urllib.error
 import urllib.request
+import xml.etree.ElementTree as ET
 import psutil
 from pathlib import Path
 
@@ -216,31 +216,30 @@ def get_plex_sessions():
     """Return active Plex streams, or None if PLEX_TOKEN is not configured."""
     if not _PLEX_TOKEN:
         return None
-    req = urllib.request.Request(
-        f"{_PLEX_URL}/status/sessions",
-        headers={"X-Plex-Token": _PLEX_TOKEN, "Accept": "application/json"},
-    )
+    url = f"{_PLEX_URL}/status/sessions?X-Plex-Token={_PLEX_TOKEN}"
+    req = urllib.request.Request(url, headers={"X-Plex-Token": _PLEX_TOKEN})
     try:
         with urllib.request.urlopen(req, timeout=3) as resp:
-            data = json.loads(resp.read())
+            root = ET.fromstring(resp.read())
     except Exception:
         return {"available": False, "stream_count": 0, "sessions": []}
 
-    container = data.get("MediaContainer", {})
     sessions = []
-    for item in container.get("Metadata") or []:
+    for item in root.findall("Video") + root.findall("Track") + root.findall("Photo"):
         media_type = item.get("type", "")
-        view_offset = item.get("viewOffset") or 0
-        duration = item.get("duration") or 0
+        view_offset = int(item.get("viewOffset") or 0)
+        duration = int(item.get("duration") or 0)
         progress = round(view_offset / duration * 100, 1) if duration else 0
+        user_el = item.find("User")
+        player_el = item.find("Player")
         sessions.append({
             "title": item.get("title", ""),
             "show": item.get("grandparentTitle") if media_type == "episode" else None,
             "type": media_type,
-            "user": (item.get("User") or {}).get("title", "unknown"),
-            "player": (item.get("Player") or {}).get("title", ""),
-            "state": (item.get("Player") or {}).get("state", ""),
-            "transcoding": "TranscodeSession" in item,
+            "user": user_el.get("title", "unknown") if user_el is not None else "unknown",
+            "player": player_el.get("title", "") if player_el is not None else "",
+            "state": player_el.get("state", "") if player_el is not None else "",
+            "transcoding": item.find("TranscodeSession") is not None,
             "progress_pct": progress,
         })
     return {"available": True, "stream_count": len(sessions), "sessions": sessions}

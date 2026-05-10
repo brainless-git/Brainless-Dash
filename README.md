@@ -34,7 +34,7 @@ A lightweight, mobile-first web dashboard for monitoring an Unraid server. Runs 
 - [Sonarr](#sonarr) — upcoming episodes for the next 5 days
 - [SABnzbd](#sabnzbd) — active downloads, speed, and queue
 - [qBittorrent](#qbittorrent) — download/upload speeds and torrent counts
-- [Minecraft](#minecraft) — server status, online players, and in-dashboard chat via RCON
+- [Minecraft](#minecraft) — server status, favicon, MOTD, latency, version, online players, and Forge mod list
 - [HTTPS / Let's Encrypt](#https--lets-encrypt) — automatic TLS with DNS challenge (Cloudflare, DigitalOcean, DuckDNS) or manual cert files
 
 ## Stack
@@ -121,8 +121,6 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 |----------|---------|-------------|
 | `MC_HOST` | (unset) | Hostname or IP of the Minecraft server. Set this to enable the status card. |
 | `MC_PORT` | `25565` | Minecraft server port. |
-| `MC_RCON_PORT` | `25575` | RCON port. Required to enable in-dashboard chat. |
-| `MC_RCON_PASSWORD` | (unset) | RCON password. Set this to show the chat box in the card. |
 
 ### HTTPS — manual certificates
 
@@ -260,33 +258,23 @@ QB_PASSWORD=yourpassword
 
 ### Minecraft
 
-The Minecraft card shows server status, MOTD, version, online player count, and each player's name as a badge. If RCON is configured, a chat box appears that broadcasts messages to the server as `[Server] your message`.
+Read-only Server List Ping (SLP). The card shows:
 
-**Server status** (read-only, no server changes required)
+- online/offline status with a coloured dot
+- server favicon (the 64x64 PNG the server advertises)
+- MOTD, including multi-line MOTDs (colour codes are stripped)
+- version name and protocol number
+- live latency in ms (measured via the SLP ping/pong round trip)
+- player count, sample player names, plus a `+N hidden` chip when the server hides full names
+- Forge or NeoForge mod count and a sample of mod IDs (when the server publishes `forgeData` / `modinfo`)
+- a `secure` chip when the server enforces secure chat
 
 ```
 MC_HOST=192.168.1.100   # or the hostname of your Minecraft server
 MC_PORT=25565           # default Minecraft port
 ```
 
-**Enabling in-dashboard chat via RCON**
-
-Edit `server.properties` on your Minecraft server:
-
-```properties
-enable-rcon=true
-rcon.port=25575
-rcon.password=a-strong-password
-```
-
-Restart the server, then set:
-
-```
-MC_RCON_PORT=25575
-MC_RCON_PASSWORD=a-strong-password
-```
-
-> Chat messages are sent as `/say <message>` which displays in-game as `[Server] <message>` and in the server log. RCON gives full console access, so use a strong unique password and keep the port firewalled to your LAN.
+No changes to the Minecraft server are required. Nothing is written back to the server.
 
 ---
 
@@ -449,7 +437,6 @@ Edit `docker-compose.yml` to set your credentials before running.
 | `/api/sabnzbd` | GET | SABnzbd queue (404 if not configured) |
 | `/api/qbittorrent` | GET | qBittorrent stats (404 if not configured) |
 | `/api/minecraft` | GET | Minecraft server status (404 if not configured) |
-| `/api/minecraft/chat` | POST | Send chat message via RCON — body: `{"message":"hello"}` |
 
 All responses are JSON.
 

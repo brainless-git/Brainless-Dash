@@ -364,15 +364,58 @@ body {
 .plex-direct { color: var(--ok); }
 
 /* Minecraft */
+.mc-head-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.mc-favicon {
+  width: 56px;
+  height: 56px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  image-rendering: pixelated;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+}
+.mc-head-info { flex: 1; min-width: 0; }
 .mc-status-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   font-family: var(--mono);
   font-size: 12px;
 }
-.mc-motd { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-version { color: var(--text); }
+.mc-latency {
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 1px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+}
+.mc-secure {
+  color: var(--ok, #4caf50);
+  font-size: 10px;
+  padding: 1px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.mc-motd {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.mc-motd > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mc-players {
   display: flex;
   flex-wrap: wrap;
@@ -389,74 +432,19 @@ body {
   border-radius: 2px;
   color: var(--text);
 }
-.mc-chat {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 2px;
+.mc-player-hidden {
+  color: var(--text-dim);
+  font-style: italic;
 }
-.mc-chat-log {
-  background: var(--bg);
-  border: 1px solid var(--border-soft);
-  border-radius: 2px;
-  max-height: 150px;
-  overflow-y: auto;
-  padding: 6px 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  scroll-behavior: smooth;
-}
-.mc-chat-line {
-  display: flex;
-  gap: 6px;
-  line-height: 1.6;
-  flex-wrap: wrap;
-  align-items: baseline;
-}
-.mc-chat-time { color: var(--text-dim); flex-shrink: 0; }
-.mc-chat-player { color: #4caf50; flex-shrink: 0; font-weight: 700; }
-.mc-chat-player-server { color: var(--text-dim); flex-shrink: 0; font-style: italic; }
-.mc-chat-msg { color: var(--text); word-break: break-word; flex: 1; }
-.mc-chat-status {
+.mc-mods {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text-dim);
-  min-height: 14px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-soft);
+  word-break: break-word;
 }
-.mc-chat-status-err { color: var(--accent); }
-.mc-chat-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.mc-chat-input {
-  flex: 1;
-  min-width: 0;
-  background: var(--bg);
-  border: 1px solid var(--border-soft);
-  border-radius: 2px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 6px 8px;
-  outline: none;
-}
-.mc-chat-input:focus { border-color: var(--accent); }
-.mc-chat-btn {
-  background: var(--accent);
-  border: none;
-  border-radius: 2px;
-  color: #fff;
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 700;
-  padding: 6px 14px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.mc-chat-btn:hover { background: var(--accent-glow); }
-.mc-chat-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mc-mods-label { color: var(--text); font-weight: 700; }
 
 /* SABnzbd download slots */
 .dl-list {

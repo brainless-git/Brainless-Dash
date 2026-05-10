@@ -175,19 +175,20 @@
       </div>
       <span class="meta" id="mc-count">—</span>
     </div>
-    <div class="mc-status-row">
-      <span id="mc-dot" class="dot dot-off"></span>
-      <span id="mc-motd" class="mc-motd">—</span>
-    </div>
-    <div class="mc-players" id="mc-players"></div>
-    <div class="mc-chat" id="mc-chat" style="display:none">
-      <div class="mc-chat-log" id="mc-chat-log" style="display:none"></div>
-      <div class="mc-chat-status" id="mc-chat-status"></div>
-      <div class="mc-chat-row">
-        <input type="text" id="mc-chat-input" class="mc-chat-input" placeholder="Send a message to the server…" maxlength="100">
-        <button type="button" id="mc-chat-send" class="mc-chat-btn">Send</button>
+    <div class="mc-head-row">
+      <img id="mc-favicon" class="mc-favicon" alt="" style="display:none">
+      <div class="mc-head-info">
+        <div class="mc-status-row">
+          <span id="mc-dot" class="dot dot-off"></span>
+          <span id="mc-version" class="mc-version">—</span>
+          <span id="mc-latency" class="mc-latency"></span>
+          <span id="mc-secure" class="mc-secure" title="Server enforces secure chat" style="display:none">secure</span>
+        </div>
+        <div id="mc-motd" class="mc-motd">—</div>
       </div>
     </div>
+    <div class="mc-players" id="mc-players"></div>
+    <div class="mc-mods" id="mc-mods" style="display:none"></div>
   </section>
 
   <section class="card" id="card-sonarr" style="display:none">

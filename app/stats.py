@@ -36,13 +36,6 @@ _ACME_CERTDIR        = "/data/certs"
 
 _MC_HOST          = os.environ.get("MC_HOST",          "")
 _MC_PORT          = int(os.environ.get("MC_PORT",          "25565"))
-_MC_RCON_PORT     = int(os.environ.get("MC_RCON_PORT",     "25575"))
-_MC_RCON_PASSWORD = os.environ.get("MC_RCON_PASSWORD", "")
-_MC_LOG_PATH      = os.environ.get("MC_LOG_PATH",      "")
-
-# Matches vanilla/Paper/Spigot chat and server-say lines in latest.log
-_MC_CHAT_RE  = re.compile(r'^\[(\d{2}:\d{2}:\d{2})\] \[Server thread/INFO\](?:\[.*?\])?: <([^>]+)> (.+)$')
-_MC_SERVER_RE = re.compile(r'^\[(\d{2}:\d{2}:\d{2})\] \[Server thread/INFO\](?:\[.*?\])?: \[Server\] (.+)$')
 
 
 def _check_service_url(name, url):
@@ -591,7 +584,22 @@ def _mc_motd(desc):
                 text += extra
     else:
         return ""
-    return re.sub(r'§.', '', text).strip()
+    # Strip § colour/format codes but preserve newlines for multi-line MOTDs.
+    return re.sub(r'§.', '', text).strip('\r\t ').strip('\n').strip()
+
+
+def _mc_read_varint_sock(sock):
+    """Read a Minecraft varint directly from a socket."""
+    n, shift = 0, 0
+    while True:
+        byte = sock.recv(1)
+        if not byte:
+            raise EOFError("connection closed")
+        b = byte[0]
+        n |= (b & 0x7F) << shift
+        shift += 7
+        if not (b & 0x80):
+            return n
 
 
 def _fetch_minecraft():
@@ -608,37 +616,67 @@ def _fetch_minecraft():
             s.sendall(_mc_varint(len(payload)) + payload)
             s.sendall(b'\x01\x00')
 
-            # Read response length varint byte by byte
-            length, shift = 0, 0
-            while True:
-                byte = s.recv(1)
-                if not byte:
-                    raise EOFError("connection closed")
-                b = byte[0]
-                length |= (b & 0x7F) << shift
-                shift += 7
-                if not (b & 0x80):
-                    break
-
+            length = _mc_read_varint_sock(s)
             pkt = _mc_recv_all(s, length)
             _, pos = _mc_read_varint(pkt, 0)          # skip packet ID
             str_len, pos = _mc_read_varint(pkt, pos)
             status = json.loads(pkt[pos:pos + str_len])
+
+            # SLP ping/pong round-trip — gives a real-time latency reading.
+            latency_ms = None
+            try:
+                t_send = time.perf_counter()
+                s.sendall(b'\x09\x01' + struct.pack('>q', int(t_send * 1000)))
+                plen = _mc_read_varint_sock(s)
+                if plen >= 9:
+                    _mc_recv_all(s, plen)
+                    latency_ms = round((time.perf_counter() - t_send) * 1000, 1)
+            except Exception:
+                pass
     except Exception as exc:
         log.debug("Minecraft ping failed: %s", exc)
-        return {"online": False, "error": "server unreachable", "log_enabled": bool(_MC_LOG_PATH)}
+        return {"online": False, "error": "server unreachable"}
 
-    players  = status.get("players", {})
+    players  = status.get("players", {}) or {}
     sample   = players.get("sample") or []
+    version  = status.get("version", {}) or {}
+    online_n = players.get("online", 0)
+    names    = [p["name"] for p in sample if isinstance(p, dict) and "name" in p]
+    hidden   = max(0, online_n - len(names))
+
+    favicon = status.get("favicon") or ""
+    if not (isinstance(favicon, str) and favicon.startswith("data:image/") and len(favicon) <= 50000):
+        favicon = ""
+
+    mod_names = []
+    mod_count = 0
+    for key in ("forgeData", "modinfo"):
+        forge = status.get(key)
+        if isinstance(forge, dict):
+            raw_mods = forge.get("mods") or forge.get("modList") or []
+            if isinstance(raw_mods, list):
+                mod_count = len(raw_mods)
+                for m in raw_mods[:6]:
+                    if isinstance(m, dict):
+                        name = m.get("modId") or m.get("modid") or ""
+                        if name:
+                            mod_names.append(name)
+                break
+
     return {
-        "online":         True,
-        "version":        status.get("version", {}).get("name", ""),
-        "motd":           _mc_motd(status.get("description", "")),
-        "players_online": players.get("online", 0),
-        "players_max":    players.get("max", 0),
-        "players":        [p["name"] for p in sample if "name" in p],
-        "rcon_enabled":   bool(_MC_RCON_PASSWORD),
-        "log_enabled":    bool(_MC_LOG_PATH),
+        "online":          True,
+        "version":         version.get("name", ""),
+        "protocol":        version.get("protocol"),
+        "motd":            _mc_motd(status.get("description", "")),
+        "players_online":  online_n,
+        "players_max":     players.get("max", 0),
+        "players":         names,
+        "hidden_players":  hidden,
+        "latency_ms":      latency_ms,
+        "favicon":         favicon,
+        "mod_count":       mod_count,
+        "mods":            mod_names,
+        "enforces_secure_chat": bool(status.get("enforcesSecureChat")),
     }
 
 
@@ -658,84 +696,8 @@ def get_minecraft():
         return _mc_result
 
 
-def send_mc_chat(message):
-    """Send a message to the server via RCON. Returns (ok, error_str)."""
-    if not _MC_RCON_PASSWORD:
-        return False, "RCON not configured"
-    # Strip control characters to prevent RCON command injection via newline chaining.
-    message = re.sub(r'[\x00-\x1f\x7f]', '', message)
-    if not message:
-        return False, "message is empty"
-    try:
-        with socket.create_connection((_MC_HOST, _MC_RCON_PORT), timeout=5) as s:
-            def _recv_exact(n):
-                d = b''
-                while len(d) < n:
-                    chunk = s.recv(n - len(d))
-                    if not chunk:
-                        raise EOFError("connection closed")
-                    d += chunk
-                return d
-
-            def _rcon(req_id, ptype, body):
-                body_b = body.encode('utf-8') + b'\x00\x00'
-                s.sendall(struct.pack('<iii', len(body_b) + 8, req_id, ptype) + body_b)
-                # Some servers (Paper, Spigot) send extra packets before the real response.
-                # Try up to 3 reads to find the packet whose ID matches what we sent.
-                for _ in range(3):
-                    length = struct.unpack('<i', _recv_exact(4))[0]
-                    if not (10 <= length <= 4096):
-                        raise ValueError(f"RCON: unexpected response length {length}")
-                    payload = _recv_exact(length)
-                    resp_id  = struct.unpack('<i', payload[:4])[0]
-                    resp_body = payload[8:].rstrip(b'\x00').decode('utf-8', errors='replace')
-                    if resp_id == -1 or resp_id == req_id:
-                        return resp_id, resp_body
-                    log.debug("RCON: discarding stale packet id=%d (waiting for %d)", resp_id, req_id)
-                raise ValueError("RCON: no matching response after 3 packets")
-
-            resp_id, _ = _rcon(1, 3, _MC_RCON_PASSWORD)
-            if resp_id == -1:
-                return False, "RCON authentication failed — check MC_RCON_PASSWORD"
-            _, resp_body = _rcon(2, 2, f"say {message}")
-            if resp_body:
-                log.debug("RCON say response: %r", resp_body)
-            return True, None
-    except Exception as exc:
-        log.warning("RCON error: %s", exc)
-        return False, "RCON command failed"
-
-
 if _MC_HOST:
     threading.Thread(target=_mc_worker, daemon=True, name="mc-poller").start()
-
-
-def get_mc_log():
-    """Return recent chat lines from the Minecraft server log file (last 50 entries)."""
-    if not _MC_LOG_PATH:
-        return None
-    path = Path(_MC_LOG_PATH)
-    if not path.exists():
-        return []
-    try:
-        with open(path, 'rb') as f:
-            f.seek(0, 2)
-            size = f.tell()
-            f.seek(max(0, size - 65536))
-            raw = f.read().decode('utf-8', errors='replace').splitlines()
-        lines = []
-        for line in raw[-300:]:
-            m = _MC_CHAT_RE.match(line)
-            if m:
-                lines.append({"time": m.group(1), "player": m.group(2), "msg": m.group(3)})
-                continue
-            m = _MC_SERVER_RE.match(line)
-            if m:
-                lines.append({"time": m.group(1), "player": "[Server]", "msg": m.group(2)})
-        return lines[-50:]
-    except OSError as exc:
-        log.warning("MC log read error: %s", exc)
-        return []
 
 
 # ── ACME auto-renewal ──────────────────────────────────────────────────────────

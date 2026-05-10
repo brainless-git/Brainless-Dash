@@ -297,32 +297,61 @@
     if (d.minecraft) {
       mcCard.style.display = '';
       const mc = d.minecraft;
+      const fav = $('mc-favicon');
+      const mods = $('mc-mods');
       if (!mc.online) {
         $('mc-dot').className = 'dot dot-off';
         $('mc-count').textContent = 'offline';
+        $('mc-version').textContent = '—';
+        $('mc-latency').textContent = '';
+        $('mc-secure').style.display = 'none';
         $('mc-motd').textContent = mc.error || 'server unreachable';
         $('mc-players').innerHTML = '';
-        $('mc-chat').style.display = 'none';
+        fav.style.display = 'none';
+        fav.removeAttribute('src');
+        mods.style.display = 'none';
+        mods.innerHTML = '';
       } else {
         $('mc-dot').className = 'dot dot-on';
         $('mc-count').textContent = mc.players_online + ' / ' + mc.players_max + ' online';
-        $('mc-motd').textContent = mc.motd || mc.version || '';
-        if (mc.players.length) {
-          $('mc-players').innerHTML = mc.players
-            .map(p => '<span class="mc-player">' + esc(p) + '</span>').join('');
-        } else if (mc.players_online > 0) {
-          $('mc-players').innerHTML = '<span class="empty">' + mc.players_online +
-            ' player' + (mc.players_online !== 1 ? 's' : '') + ' online</span>';
+        const versionParts = [mc.version || 'unknown'];
+        if (mc.protocol) versionParts.push('proto ' + mc.protocol);
+        $('mc-version').textContent = versionParts.join(' · ');
+        $('mc-latency').textContent = mc.latency_ms != null ? mc.latency_ms + ' ms' : '';
+        $('mc-secure').style.display = mc.enforces_secure_chat ? '' : 'none';
+        // MOTD: render multi-line if the server returned newlines.
+        const motdEl = $('mc-motd');
+        const motd = mc.motd || mc.version || '';
+        motdEl.innerHTML = motd
+          ? motd.split('\n').map(l => '<div>' + esc(l) + '</div>').join('')
+          : '';
+        if (mc.favicon) {
+          fav.src = mc.favicon;
+          fav.style.display = '';
+        } else {
+          fav.style.display = 'none';
+          fav.removeAttribute('src');
+        }
+        const chips = mc.players.map(p => '<span class="mc-player">' + esc(p) + '</span>');
+        if (mc.hidden_players > 0) {
+          chips.push('<span class="mc-player mc-player-hidden">+' + mc.hidden_players + ' hidden</span>');
+        }
+        if (chips.length) {
+          $('mc-players').innerHTML = chips.join('');
         } else {
           $('mc-players').innerHTML = '<span class="empty">no players online</span>';
         }
-        const chatEl = $('mc-chat');
-        chatEl.style.display = (mc.rcon_enabled || mc.log_enabled) ? '' : 'none';
-        const logEl = $('mc-chat-log');
-        if (logEl) logEl.style.display = mc.log_enabled ? '' : 'none';
-        _mcLogEnabled = !!mc.log_enabled;
-        const rowEl = chatEl.querySelector('.mc-chat-row');
-        if (rowEl) rowEl.style.display = mc.rcon_enabled ? '' : 'none';
+        if (mc.mod_count > 0) {
+          const sample = (mc.mods || []).slice(0, 6).map(esc).join(', ');
+          const more = mc.mod_count > (mc.mods || []).length ? ', …' : '';
+          mods.innerHTML = '<span class="mc-mods-label">' + mc.mod_count + ' mod' +
+            (mc.mod_count === 1 ? '' : 's') + ':</span> <span class="mc-mods-list">' +
+            sample + more + '</span>';
+          mods.style.display = '';
+        } else {
+          mods.style.display = 'none';
+          mods.innerHTML = '';
+        }
       }
     } else {
       mcCard.style.display = 'none';
@@ -403,82 +432,8 @@
     }
   }
 
-  let _mcLogCount = -1;
-  let _mcLogEnabled = false;
-
-  async function mcLogTick() {
-    if (!_mcLogEnabled) return;
-    try {
-      const r = await fetch('/api/minecraft/log', { cache: 'no-store' });
-      if (!r.ok) return;
-      const data = await r.json();
-      const lines = data.lines || [];
-      if (lines.length === _mcLogCount) return;
-      _mcLogCount = lines.length;
-      const logEl = $('mc-chat-log');
-      if (!logEl) return;
-      const atBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30;
-      logEl.innerHTML = lines.length === 0
-        ? '<div class="mc-chat-time">no chat yet</div>'
-        : lines.map(l => {
-            const isServer = l.player === '[Server]';
-            return '<div class="mc-chat-line">' +
-              '<span class="mc-chat-time">' + esc(l.time) + '</span>' +
-              '<span class="' + (isServer ? 'mc-chat-player-server' : 'mc-chat-player') + '">' + esc(l.player) + '</span>' +
-              '<span class="mc-chat-msg">' + esc(l.msg) + '</span>' +
-              '</div>';
-          }).join('');
-      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
-    } catch (e) { /* silent */ }
-  }
-
-  function initMcChat() {
-    const btn    = $('mc-chat-send');
-    const input  = $('mc-chat-input');
-    const status = $('mc-chat-status');
-    if (!btn || !input) return;
-
-    function setStatus(msg, isErr) {
-      if (!status) return;
-      status.textContent = msg;
-      status.className = 'mc-chat-status' + (isErr ? ' mc-chat-status-err' : '');
-      if (msg) setTimeout(() => { if (status.textContent === msg) status.textContent = ''; }, 3000);
-    }
-
-    async function send() {
-      const msg = input.value.trim();
-      if (!msg) return;
-      btn.disabled = true;
-      setStatus('Sending…', false);
-      try {
-        const r = await fetch('/api/minecraft/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: msg }),
-        });
-        if (r.ok) {
-          input.value = '';
-          setStatus('Sent', false);
-          mcLogTick();
-        } else {
-          const err = await r.json().catch(() => ({}));
-          setStatus(err.error || 'send failed', true);
-        }
-      } catch (e) {
-        setStatus('connection error', true);
-      } finally {
-        btn.disabled = false;
-        input.focus();
-      }
-    }
-
-    btn.addEventListener('click', send);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
-  }
-
   async function init() {
     initCanvas();
-    initMcChat();
     try {
       const r = await fetch('/api/config', { cache: 'no-store' });
       if (r.ok) {
@@ -488,8 +443,6 @@
     } catch (e) { /* use default */ }
     tick();
     setInterval(tick, REFRESH_MS);
-    mcLogTick();
-    setInterval(mcLogTick, REFRESH_MS);
   }
 
   init();

@@ -320,6 +320,7 @@
         chatEl.style.display = (mc.rcon_enabled || mc.log_enabled) ? '' : 'none';
         const logEl = $('mc-chat-log');
         if (logEl) logEl.style.display = mc.log_enabled ? '' : 'none';
+        _mcLogEnabled = !!mc.log_enabled;
         const rowEl = chatEl.querySelector('.mc-chat-row');
         if (rowEl) rowEl.style.display = mc.rcon_enabled ? '' : 'none';
       }
@@ -403,8 +404,10 @@
   }
 
   let _mcLogCount = -1;
+  let _mcLogEnabled = false;
 
   async function mcLogTick() {
+    if (!_mcLogEnabled) return;
     try {
       const r = await fetch('/api/minecraft/log', { cache: 'no-store' });
       if (!r.ok) return;

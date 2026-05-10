@@ -384,13 +384,17 @@ _sabnzbd_result = None
 
 
 def _fetch_sabnzbd():
-    url = f"{_SABNZBD_URL}/api?mode=queue&output=json"
-    req = urllib.request.Request(url, headers={"X-API-Key": _SABNZBD_API_KEY})
+    # Use apikey query param: SABnzbd's X-API-Key header is not honoured by
+    # all versions/endpoints (5.0.1 returns 403 for queue mode with the header
+    # but accepts the query param). Redact the key from exception messages so
+    # it never lands in logs.
+    url = f"{_SABNZBD_URL}/api?mode=queue&output=json&apikey={_SABNZBD_API_KEY}"
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(urllib.request.Request(url), timeout=5) as resp:
             data = json.loads(resp.read())
     except Exception as exc:
-        log.warning("SABnzbd request failed: %s", exc)
+        msg = str(exc).replace(_SABNZBD_API_KEY, "***") if _SABNZBD_API_KEY else str(exc)
+        log.warning("SABnzbd request failed: %s", msg)
         return {"available": False, "error": "upstream request failed"}
 
     q = data.get("queue", {})

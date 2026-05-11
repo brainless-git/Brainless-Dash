@@ -482,6 +482,8 @@
   function applyRoute() {
     const mod = parseHash();
     if (mod === currentModule) return;
+    // Reset transient per-module UI state when changing modules.
+    qbSelected = new Set();
     currentModule = mod;
     if (mod) showDetail(); else showDashboard();
   }
@@ -553,6 +555,10 @@
           '<div class="mods-grid">' + mods + '</div></div>' : '');
   }
 
+  // Track which torrent hashes the user has selected for bulk actions.
+  // Cleared on each detail-view (re)entry so it doesn't leak between sessions.
+  let qbSelected = new Set();
+
   function renderQbDetail(qb) {
     if (!qb.available) {
       $('detail-meta').textContent = 'unavailable';
@@ -571,12 +577,25 @@
       statItem('Session down', fmtBytes(qb.dl_total || 0)) +
       statItem('Session up', fmtBytes(qb.ul_total || 0));
 
+    // Drop selections for hashes that no longer exist (torrent removed upstream)
+    const liveHashes = new Set((qb.torrents || []).map(t => t.hash));
+    qbSelected = new Set([...qbSelected].filter(h => liveHashes.has(h)));
+
     const torrents = (qb.torrents || []).map(t => {
       const stCls = stateClass(t.state);
       const right = t.dl_speed > 0 ? '↓ ' + fmtRate(t.dl_speed) :
                     t.ul_speed > 0 ? '↑ ' + fmtRate(t.ul_speed) : '';
-      return '<div class="tor-item">' +
-        '<div class="tor-name">' + esc(t.name) + '</div>' +
+      const checked = qbSelected.has(t.hash) ? ' checked' : '';
+      return '<div class="tor-item" data-hash="' + esc(t.hash) + '">' +
+        '<div class="tor-row-top">' +
+          '<label class="tor-select"><input type="checkbox" class="qb-select"' + checked +
+            ' data-hash="' + esc(t.hash) + '" aria-label="select torrent"></label>' +
+          '<div class="tor-name">' + esc(t.name) + '</div>' +
+          '<div class="tor-row-actions">' +
+            '<button class="qb-action-btn" data-action="recheck" data-hash="' + esc(t.hash) + '" title="Force recheck this torrent">Recheck</button>' +
+            '<button class="qb-action-btn" data-action="reannounce" data-hash="' + esc(t.hash) + '" title="Reannounce this torrent to trackers">Reannounce</button>' +
+          '</div>' +
+        '</div>' +
         '<div class="tor-meta">' +
           '<span class="tor-state ' + stCls + '">' + esc(t.state) + '</span>' +
           '<span>' + fmtBytes(t.size) + ' · ratio ' + t.ratio + (t.category ? ' · ' + esc(t.category) : '') + '</span>' +
@@ -586,9 +605,92 @@
       '</div>';
     }).join('') || '<div class="empty">no torrents</div>';
 
+    const actionsBar =
+      '<div class="qb-actions-bar">' +
+        '<button class="qb-action-btn" data-action="recheck" data-target="all">Recheck all</button>' +
+        '<button class="qb-action-btn" data-action="reannounce" data-target="all">Reannounce all</button>' +
+        '<button class="qb-action-btn primary" data-action="recheck" data-target="selected">Recheck selected</button>' +
+        '<button class="qb-action-btn primary" data-action="reannounce" data-target="selected">Reannounce selected</button>' +
+        '<span class="qb-selected-count" id="qb-selected-count"></span>' +
+      '</div>';
+
     $('detail-body').innerHTML =
       '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
-      '<div class="detail-section"><h3>Torrents</h3><div class="tor-list">' + torrents + '</div></div>';
+      '<div class="detail-section"><h3>Torrents</h3>' + actionsBar +
+        '<div class="tor-list">' + torrents + '</div></div>';
+
+    updateQbSelectedCount();
+    wireQbActions();
+  }
+
+  function updateQbSelectedCount() {
+    const el = $('qb-selected-count');
+    if (!el) return;
+    el.textContent = qbSelected.size
+      ? qbSelected.size + ' selected'
+      : 'no selection';
+  }
+
+  function wireQbActions() {
+    document.querySelectorAll('.qb-select').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const h = cb.getAttribute('data-hash');
+        if (cb.checked) qbSelected.add(h); else qbSelected.delete(h);
+        updateQbSelectedCount();
+      });
+    });
+    document.querySelectorAll('.qb-action-btn').forEach(btn => {
+      btn.addEventListener('click', () => qbDoAction(btn));
+    });
+  }
+
+  async function qbDoAction(btn) {
+    const action = btn.getAttribute('data-action');
+    const target = btn.getAttribute('data-target');
+    const hash = btn.getAttribute('data-hash');
+    let hashes;
+    if (hash) {
+      hashes = [hash];
+    } else if (target === 'selected') {
+      if (qbSelected.size === 0) {
+        flashBtn(btn, 'No selection', 'warn');
+        return;
+      }
+      hashes = [...qbSelected];
+    } else {
+      hashes = 'all';
+    }
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = '…';
+    try {
+      const r = await fetch('/api/qbittorrent/' + action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hashes }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok && data.ok) {
+        flashBtn(btn, '✓', 'ok', original);
+      } else {
+        flashBtn(btn, 'failed', 'warn', original);
+        console.error('qb action failed', data);
+      }
+    } catch (e) {
+      flashBtn(btn, 'failed', 'warn', original);
+      console.error(e);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function flashBtn(btn, msg, cls, restore) {
+    btn.textContent = msg;
+    btn.classList.add('flash-' + cls);
+    setTimeout(() => {
+      btn.classList.remove('flash-' + cls);
+      if (restore !== undefined) btn.textContent = restore;
+    }, 1200);
   }
 
   function renderSabDetail(sab) {

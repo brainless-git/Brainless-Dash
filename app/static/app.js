@@ -422,6 +422,7 @@
   }
 
   async function tick() {
+    if (currentModule) return; // detail view drives its own refresh
     try {
       const r = await fetch('/api/stats', { cache: 'no-store' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -432,8 +433,325 @@
     }
   }
 
+  // ── Detail view router ──────────────────────────────────────────────────────
+
+  const MODULES = {
+    minecraft:   { title: 'Minecraft',   endpoint: '/api/minecraft',   render: renderMinecraftDetail },
+    qbittorrent: { title: 'qBittorrent', endpoint: '/api/qbittorrent', render: renderQbDetail },
+    sabnzbd:     { title: 'SABnzbd',     endpoint: '/api/sabnzbd',     render: renderSabDetail },
+    sonarr:      { title: 'Sonarr',      endpoint: '/api/sonarr',      render: renderSonarrDetail },
+    plex:        { title: 'Plex',        endpoint: '/api/plex',        render: renderPlexDetail },
+  };
+
+  let currentModule = null;
+
+  function parseHash() {
+    const m = (location.hash || '').match(/^#\/([a-z]+)$/);
+    return m && MODULES[m[1]] ? m[1] : null;
+  }
+
+  async function renderDetail() {
+    const mod = MODULES[currentModule];
+    if (!mod) return;
+    $('detail-title').textContent = mod.title;
+    try {
+      const r = await fetch(mod.endpoint, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      mod.render(data);
+    } catch (e) {
+      console.error(e);
+      $('detail-body').innerHTML = '<div class="empty">failed to load: ' + esc(e.message) + '</div>';
+      $('detail-meta').textContent = '';
+    }
+  }
+
+  function showDetail() {
+    document.querySelector('.content').style.display = 'none';
+    $('detail').style.display = '';
+    renderDetail();
+    window.scrollTo(0, 0);
+  }
+
+  function showDashboard() {
+    $('detail').style.display = 'none';
+    document.querySelector('.content').style.display = '';
+    tick();
+  }
+
+  function applyRoute() {
+    const mod = parseHash();
+    if (mod === currentModule) return;
+    currentModule = mod;
+    if (mod) showDetail(); else showDashboard();
+  }
+
+  function fmtEta(secs) {
+    if (!secs || secs >= 8640000) return '∞';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (h) return h + 'h ' + m + 'm';
+    if (m) return m + 'm ' + s + 's';
+    return s + 's';
+  }
+
+  function statItem(label, value, cls) {
+    return '<div class="detail-stat"><div class="detail-stat-label">' + esc(label) + '</div>' +
+      '<div class="detail-stat-value' + (cls ? ' ' + cls : '') + '">' + value + '</div></div>';
+  }
+
+  function stateClass(state) {
+    const s = (state || '').toLowerCase();
+    if (s.includes('paused')) return 'pause';
+    if (s.includes('dl') || s.includes('downloading') || s.includes('meta') || s.includes('alloc') || s.includes('check')) return 'dl';
+    if (s.includes('up') || s.includes('seed')) return 'up';
+    return '';
+  }
+
+  // ── Detail renderers ────────────────────────────────────────────────────────
+
+  function renderMinecraftDetail(mc) {
+    if (!mc.online) {
+      $('detail-meta').textContent = 'offline';
+      $('detail-body').innerHTML = '<div class="detail-section"><div class="empty">' +
+        esc(mc.error || 'server unreachable') + '</div></div>';
+      return;
+    }
+    $('detail-meta').textContent = mc.players_online + ' / ' + mc.players_max + ' online';
+    const motdLines = (mc.motd || '').split('\n').map(l => '<div>' + esc(l) + '</div>').join('');
+    const favHtml = mc.favicon ? '<img class="mc-favicon" src="' + mc.favicon + '" alt="">' : '';
+    const stats =
+      statItem('Version', esc(mc.version || '—')) +
+      statItem('Protocol', mc.protocol != null ? mc.protocol : '—') +
+      statItem('Latency', mc.latency_ms != null ? mc.latency_ms + ' ms' : '—') +
+      statItem('Players', mc.players_online + ' / ' + mc.players_max, 'accent') +
+      statItem('Mods', mc.mod_count || 0) +
+      statItem('Secure chat', mc.enforces_secure_chat ? 'yes' : 'no', mc.enforces_secure_chat ? 'ok' : '');
+
+    const players = (mc.players || []).map(p => '<span class="mc-player">' + esc(p) + '</span>').join('');
+    const hidden = mc.hidden_players > 0 ? '<span class="mc-player mc-player-hidden">+' + mc.hidden_players + ' hidden</span>' : '';
+    const playersBlock = players + hidden ||
+      '<span class="empty">no players online</span>';
+
+    const mods = (mc.mods || []).map(m => '<div class="mod-chip">' + esc(m) + '</div>').join('') ||
+      '<span class="empty">no mods</span>';
+
+    $('detail-body').innerHTML =
+      '<div class="detail-section">' +
+        '<div class="mc-detail-banner">' + favHtml +
+          '<div><div class="mc-detail-name">' + esc(mc.version || 'Minecraft Server') + '</div>' +
+          '<div class="mc-motd">' + motdLines + '</div></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
+      '<div class="detail-section"><h3>Online players</h3>' +
+        '<div class="mc-players">' + playersBlock + '</div>' +
+      '</div>' +
+      (mc.mod_count > 0 ?
+        '<div class="detail-section"><h3>Mods (' + mc.mod_count + ')</h3>' +
+          '<div class="mods-grid">' + mods + '</div></div>' : '');
+  }
+
+  function renderQbDetail(qb) {
+    if (!qb.available) {
+      $('detail-meta').textContent = 'unavailable';
+      $('detail-body').innerHTML = '<div class="detail-section"><div class="empty">' +
+        esc(qb.error || 'qbittorrent unavailable') + '</div></div>';
+      return;
+    }
+    $('detail-meta').textContent = qb.total + (qb.total === 1 ? ' torrent' : ' torrents');
+    const stats =
+      statItem('Down', fmtRate(qb.dl_speed), 'accent') +
+      statItem('Up', fmtRate(qb.ul_speed), 'ok') +
+      statItem('Downloading', qb.downloading) +
+      statItem('Seeding', qb.seeding) +
+      statItem('Paused', qb.paused) +
+      statItem('Total', qb.total) +
+      statItem('Session down', fmtBytes(qb.dl_total || 0)) +
+      statItem('Session up', fmtBytes(qb.ul_total || 0));
+
+    const torrents = (qb.torrents || []).map(t => {
+      const stCls = stateClass(t.state);
+      const right = t.dl_speed > 0 ? '↓ ' + fmtRate(t.dl_speed) :
+                    t.ul_speed > 0 ? '↑ ' + fmtRate(t.ul_speed) : '';
+      return '<div class="tor-item">' +
+        '<div class="tor-name">' + esc(t.name) + '</div>' +
+        '<div class="tor-meta">' +
+          '<span class="tor-state ' + stCls + '">' + esc(t.state) + '</span>' +
+          '<span>' + fmtBytes(t.size) + ' · ratio ' + t.ratio + (t.category ? ' · ' + esc(t.category) : '') + '</span>' +
+          '<span>' + right + (t.eta && t.eta < 8640000 ? ' · ETA ' + fmtEta(t.eta) : '') + '</span>' +
+        '</div>' +
+        '<div class="bar"><div class="bar-fill" style="width:' + t.progress + '%"></div></div>' +
+      '</div>';
+    }).join('') || '<div class="empty">no torrents</div>';
+
+    $('detail-body').innerHTML =
+      '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
+      '<div class="detail-section"><h3>Torrents</h3><div class="tor-list">' + torrents + '</div></div>';
+  }
+
+  function renderSabDetail(sab) {
+    if (!sab.available) {
+      $('detail-meta').textContent = 'unavailable';
+      $('detail-body').innerHTML = '<div class="detail-section"><div class="empty">' +
+        esc(sab.error || 'sabnzbd unavailable') + '</div></div>';
+      return;
+    }
+    $('detail-meta').textContent = sab.status + ' · ' + sab.queue_count + (sab.queue_count === 1 ? ' item' : ' items');
+    const stats =
+      statItem('Status', esc(sab.status), sab.paused ? 'warn' : 'ok') +
+      statItem('Speed', (sab.speed || '0') + '/s', 'accent') +
+      statItem('Size left', esc(sab.size_left || '0 B')) +
+      statItem('Time left', esc(sab.time_left || '—')) +
+      statItem('Queue', sab.queue_count) +
+      statItem('Disk free (incomplete)', esc(sab.diskspace1 || '—') + ' GB') +
+      statItem('Disk free (complete)', esc(sab.diskspace2 || '—') + ' GB');
+
+    const slots = (sab.slots || []).map(s => {
+      const pct = s.percent.toFixed(0);
+      return '<div class="slot-item">' +
+        '<div class="slot-name">' + esc(s.filename) + '</div>' +
+        '<div class="slot-meta">' +
+          '<span>' + esc(s.status) + (s.category ? ' · ' + esc(s.category) : '') + '</span>' +
+          '<span>' + esc(s.size_left || '') + ' / ' + esc(s.size || '') + '</span>' +
+          '<span>ETA ' + esc(s.time_left || '—') + '</span>' +
+        '</div>' +
+        '<div class="bar"><div class="bar-fill ' + barClass(s.percent) + '" style="width:' + pct + '%"></div></div>' +
+      '</div>';
+    }).join('') || '<div class="empty">queue empty</div>';
+
+    $('detail-body').innerHTML =
+      '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
+      '<div class="detail-section"><h3>Queue</h3><div class="slot-list">' + slots + '</div></div>';
+  }
+
+  function renderSonarrDetail(sonarr) {
+    if (!sonarr.available) {
+      $('detail-meta').textContent = 'unavailable';
+      $('detail-body').innerHTML = '<div class="detail-section"><div class="empty">' +
+        esc(sonarr.error || 'sonarr unavailable') + '</div></div>';
+      return;
+    }
+    const eps = sonarr.episodes || [];
+    const downloaded = eps.filter(e => e.downloaded).length;
+    $('detail-meta').textContent = eps.length + (eps.length === 1 ? ' episode' : ' episodes') +
+      ' · next 14 days';
+
+    const stats =
+      statItem('Total episodes', eps.length) +
+      statItem('Downloaded', downloaded, 'ok') +
+      statItem('Upcoming', eps.length - downloaded, 'warn') +
+      statItem('Unique shows', new Set(eps.map(e => e.show)).size);
+
+    let body = '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>';
+    if (!eps.length) {
+      body += '<div class="detail-section"><div class="empty">no episodes in the next 14 days</div></div>';
+    } else {
+      const days = [], dayMap = {};
+      eps.forEach(ep => {
+        if (!dayMap[ep.air_date]) { dayMap[ep.air_date] = []; days.push(ep.air_date); }
+        dayMap[ep.air_date].push(ep);
+      });
+      body += days.map(d => {
+        const items = dayMap[d].map(ep => {
+          const epNum = 'S' + String(ep.season).padStart(2, '0') + 'E' + String(ep.episode).padStart(2, '0');
+          const badge = ep.downloaded
+            ? '<span class="sonarr-badge downloaded">Downloaded</span>'
+            : '<span class="sonarr-badge upcoming">Upcoming</span>';
+          const overview = ep.overview
+            ? '<div class="sonarr-detail-overview">' + esc(ep.overview) + '</div>' : '';
+          return '<div class="sonarr-detail-ep">' +
+            '<div class="sonarr-episode">' +
+              '<div class="sonarr-left">' +
+                '<span class="sonarr-show">' + esc(ep.show) + (ep.network ? ' · ' + esc(ep.network) : '') + '</span>' +
+                '<span class="sonarr-ep-title">' + esc(ep.title) + '</span>' +
+              '</div>' +
+              '<div class="sonarr-right"><span class="sonarr-ep-num">' + epNum + '</span>' + badge + '</div>' +
+            '</div>' +
+            overview +
+          '</div>';
+        }).join('');
+        return '<div class="detail-section"><h3>' + esc(dayMap[d][0].day_label) + '</h3>' + items + '</div>';
+      }).join('');
+    }
+    $('detail-body').innerHTML = body;
+  }
+
+  function renderPlexDetail(plex) {
+    if (!plex.available) {
+      $('detail-meta').textContent = 'unavailable';
+      $('detail-body').innerHTML = '<div class="detail-section"><div class="empty">' +
+        esc(plex.error || 'plex unavailable') + '</div></div>';
+      return;
+    }
+    const sessions = plex.sessions || [];
+    $('detail-meta').textContent = sessions.length + (sessions.length === 1 ? ' stream' : ' streams');
+    const transcoding = sessions.filter(s => s.transcoding).length;
+
+    const stats =
+      statItem('Active streams', sessions.length, 'accent') +
+      statItem('Direct play', sessions.length - transcoding, 'ok') +
+      statItem('Transcoding', transcoding, transcoding ? 'warn' : '') +
+      statItem('Paused', sessions.filter(s => s.state === 'paused').length);
+
+    let body = '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>';
+    if (!sessions.length) {
+      body += '<div class="detail-section"><div class="empty">no active streams</div></div>';
+    } else {
+      const items = sessions.map(s => {
+        let title = s.title;
+        let subtitle = '';
+        if (s.show) {
+          const epNum = (s.season != null && s.episode != null)
+            ? 'S' + String(s.season).padStart(2, '0') + 'E' + String(s.episode).padStart(2, '0') + ' · ' : '';
+          title = s.show;
+          subtitle = epNum + s.title;
+        } else if (s.year) {
+          subtitle = String(s.year);
+        }
+        const dur = s.duration ? Math.floor(s.duration / 60000) + ' min' : '';
+        const tags = [
+          '<span class="plex-tag">' + esc(s.type || 'media') + '</span>',
+          s.library ? '<span class="plex-tag">' + esc(s.library) + '</span>' : '',
+          s.transcoding
+            ? '<span class="plex-tag warn">transcode: ' + esc(s.video_decision) + '/' + esc(s.audio_decision) + '</span>'
+            : '<span class="plex-tag ok">direct play</span>',
+          s.state === 'paused' ? '<span class="plex-tag warn">paused</span>' : '',
+        ].filter(Boolean).join('');
+        return '<div class="plex-detail-session">' +
+          '<div class="plex-detail-title">' + esc(title) + '</div>' +
+          (subtitle ? '<div class="plex-detail-subtitle">' + esc(subtitle) + '</div>' : '') +
+          '<div class="plex-meta"><span>' + esc(s.user) + ' · ' + esc(s.player) +
+            (s.platform ? ' (' + esc(s.platform) + ')' : '') + '</span>' +
+            '<span>' + s.progress_pct + '%' + (dur ? ' of ' + dur : '') + '</span></div>' +
+          '<div class="bar"><div class="bar-fill" style="width:' + s.progress_pct + '%"></div></div>' +
+          '<div class="plex-detail-tags">' + tags + '</div>' +
+        '</div>';
+      }).join('');
+      body += '<div class="detail-section"><h3>Sessions</h3>' + items + '</div>';
+    }
+    $('detail-body').innerHTML = body;
+  }
+
+  function attachModuleClicks() {
+    document.querySelectorAll('.module-card').forEach(card => {
+      const mod = card.getAttribute('data-module');
+      const go = (e) => { e.preventDefault(); location.hash = '#/' + mod; };
+      card.addEventListener('click', go);
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') go(e);
+      });
+    });
+  }
+
   async function init() {
     initCanvas();
+    attachModuleClicks();
+    window.addEventListener('hashchange', () => {
+      applyRoute();
+      if (currentModule) renderDetail();
+    });
     try {
       const r = await fetch('/api/config', { cache: 'no-store' });
       if (r.ok) {
@@ -441,8 +759,12 @@
         if (cfg.refresh_ms && cfg.refresh_ms >= 500) REFRESH_MS = cfg.refresh_ms;
       }
     } catch (e) { /* use default */ }
+    applyRoute();
     tick();
-    setInterval(tick, REFRESH_MS);
+    setInterval(() => {
+      if (currentModule) renderDetail();
+      else tick();
+    }, REFRESH_MS);
   }
 
   init();

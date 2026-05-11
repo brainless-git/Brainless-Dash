@@ -106,7 +106,7 @@
     </div>
   </section>
 
-  <section class="card" id="card-sabnzbd" style="display:none">
+  <section class="card module-card" id="card-sabnzbd" data-module="sabnzbd" tabindex="0" role="link" style="display:none">
     <div class="card-head">
       <div class="card-title">
         <svg class="card-logo" viewBox="0 0 16 16" aria-hidden="true">
@@ -130,7 +130,7 @@
     <div class="dl-list" id="sabnzbd-slots"></div>
   </section>
 
-  <section class="card" id="card-qbittorrent" style="display:none">
+  <section class="card module-card" id="card-qbittorrent" data-module="qbittorrent" tabindex="0" role="link" style="display:none">
     <div class="card-head">
       <div class="card-title">
         <svg class="card-logo" viewBox="0 0 16 16" aria-hidden="true">
@@ -160,7 +160,7 @@
     </div>
   </section>
 
-  <section class="card" id="card-minecraft" style="display:none">
+  <section class="card module-card" id="card-minecraft" data-module="minecraft" tabindex="0" role="link" style="display:none">
     <div class="card-head">
       <div class="card-title">
         <svg class="card-logo" viewBox="0 0 16 16" aria-hidden="true">
@@ -191,7 +191,7 @@
     <div class="mc-mods" id="mc-mods" style="display:none"></div>
   </section>
 
-  <section class="card" id="card-sonarr" style="display:none">
+  <section class="card module-card" id="card-sonarr" data-module="sonarr" tabindex="0" role="link" style="display:none">
     <div class="card-head">
       <div class="card-title">
         <svg class="card-logo" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -208,7 +208,7 @@
     </div>
   </section>
 
-  <section class="card" id="card-plex" style="display:none">
+  <section class="card module-card" id="card-plex" data-module="plex" tabindex="0" role="link" style="display:none">
     <div class="card-head">
       <div class="card-title">
         <svg class="card-logo" viewBox="0 0 16 16" aria-hidden="true">
@@ -225,6 +225,17 @@
   </section>
 
 </main>
+
+<section id="detail" class="detail" style="display:none">
+  <div class="detail-bar">
+    <a href="#/" class="detail-back" id="detail-back">← Back</a>
+    <h1 class="detail-title" id="detail-title">—</h1>
+    <span class="meta" id="detail-meta"></span>
+  </div>
+  <div class="detail-body" id="detail-body">
+    <div class="empty">loading…</div>
+  </div>
+</section>
 
 <footer class="footer">
   <span>refresh <span id="refresh-rate">2s</span></span>

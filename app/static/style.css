@@ -711,6 +711,83 @@ body {
   flex-shrink: 0;
 }
 
+/* Minecraft op badges + buttons */
+.mc-gamemode {
+  font-size: 10px;
+  padding: 1px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: var(--mono);
+  color: var(--text-dim);
+}
+.mc-gamemode.mc-gm-creative { color: var(--accent); border-color: var(--accent); }
+.mc-gamemode.mc-gm-survival { color: var(--ok); border-color: var(--ok); }
+.mc-gamemode.mc-gm-adventure { color: var(--warn); border-color: var(--warn); }
+.mc-gamemode.mc-gm-hardcore { background: rgba(229,57,53,0.15); color: var(--crit); border-color: var(--crit); }
+
+.mc-op-badge {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 1px 4px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.mc-op-level {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 1px 4px;
+  font-size: 8px;
+  font-weight: 700;
+  background: var(--bg-card);
+  color: var(--text-faint);
+  border-radius: 2px;
+  vertical-align: middle;
+}
+.mc-player-op { border-color: var(--accent); }
+.mc-player-op-online {
+  border-color: var(--ok);
+  box-shadow: 0 0 0 1px var(--ok) inset;
+}
+.mc-op-btn {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  background: var(--bg-card);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.mc-op-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mc-op-btn:disabled { opacity: 0.5; cursor: wait; }
+.mc-op-btn.flash-ok { background: var(--ok); color: #fff; border-color: var(--ok); }
+.mc-op-btn.flash-warn { background: var(--warn); color: #1c1c1c; border-color: var(--warn); }
+.mc-rcon-hint {
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--text-faint);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 6px;
+}
+
 /* Detail: minecraft */
 .mc-detail-banner {
   display: flex;

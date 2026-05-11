@@ -106,5 +106,14 @@ def minecraft_stats():
     return result
 
 
+@app.post("/api/minecraft/{action}")
+def minecraft_op_action(action: str, payload: dict = Body(default={})):
+    if action not in ("op", "deop"):
+        return JSONResponse({"ok": False, "error": "unknown action"}, status_code=404)
+    player = (payload.get("player") or "").strip()
+    result = stats.mc_op_action(action, player)
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
 # Serve static frontend from root
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

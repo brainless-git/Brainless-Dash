@@ -319,6 +319,15 @@
         $('mc-version').textContent = versionParts.join(' · ');
         $('mc-latency').textContent = mc.latency_ms != null ? mc.latency_ms + ' ms' : '';
         $('mc-secure').style.display = mc.enforces_secure_chat ? '' : 'none';
+        const gmEl = $('mc-gamemode');
+        if (mc.gamemode) {
+          gmEl.textContent = mc.hardcore ? mc.gamemode + ' hc' : mc.gamemode;
+          gmEl.className = 'mc-gamemode mc-gm-' + (mc.gamemode || '').toLowerCase() +
+            (mc.hardcore ? ' mc-gm-hardcore' : '');
+          gmEl.style.display = '';
+        } else {
+          gmEl.style.display = 'none';
+        }
         // MOTD: render multi-line if the server returned newlines.
         const motdEl = $('mc-motd');
         const motd = mc.motd || mc.version || '';
@@ -513,6 +522,21 @@
 
   // ── Detail renderers ────────────────────────────────────────────────────────
 
+  function gamemodeLabel(mc) {
+    const g = (mc.gamemode || '').toLowerCase();
+    if (!g) return '—';
+    const label = g.charAt(0).toUpperCase() + g.slice(1);
+    return mc.hardcore ? label + ' (hardcore)' : label;
+  }
+
+  function gamemodeClass(mc) {
+    const g = (mc.gamemode || '').toLowerCase();
+    if (mc.hardcore) return 'warn';
+    if (g === 'creative') return 'accent';
+    if (g === 'survival') return 'ok';
+    return '';
+  }
+
   function renderMinecraftDetail(mc) {
     if (!mc.online) {
       $('detail-meta').textContent = 'offline';
@@ -524,20 +548,50 @@
     const motdLines = (mc.motd || '').split('\n').map(l => '<div>' + esc(l) + '</div>').join('');
     const favHtml = mc.favicon ? '<img class="mc-favicon" src="' + mc.favicon + '" alt="">' : '';
     const stats =
+      statItem('Gamemode', esc(gamemodeLabel(mc)), gamemodeClass(mc)) +
+      statItem('Difficulty', esc(mc.difficulty || '—')) +
       statItem('Version', esc(mc.version || '—')) +
       statItem('Protocol', mc.protocol != null ? mc.protocol : '—') +
       statItem('Latency', mc.latency_ms != null ? mc.latency_ms + ' ms' : '—') +
       statItem('Players', mc.players_online + ' / ' + mc.players_max, 'accent') +
       statItem('Mods', mc.mod_count || 0) +
-      statItem('Secure chat', mc.enforces_secure_chat ? 'yes' : 'no', mc.enforces_secure_chat ? 'ok' : '');
+      statItem('PvP', mc.pvp ? 'yes' : 'no', mc.pvp ? 'warn' : '');
 
-    const players = (mc.players || []).map(p => '<span class="mc-player">' + esc(p) + '</span>').join('');
-    const hidden = mc.hidden_players > 0 ? '<span class="mc-player mc-player-hidden">+' + mc.hidden_players + ' hidden</span>' : '';
-    const playersBlock = players + hidden ||
-      '<span class="empty">no players online</span>';
+    const onlineOps = new Set((mc.online_op_names || []).map(n => n.toLowerCase()));
+    const rcon = mc.rcon_available;
+
+    const playerChips = (mc.players || []).map(p => {
+      const isOp = onlineOps.has(p.toLowerCase());
+      const opBadge = isOp ? '<span class="mc-op-badge" title="Operator">OP</span>' : '';
+      const action = isOp ? 'deop' : 'op';
+      const btnLabel = isOp ? 'Deop' : 'Op';
+      const btn = rcon
+        ? '<button class="mc-op-btn" data-action="' + action + '" data-player="' + esc(p) +
+            '" title="' + (isOp ? 'Remove operator' : 'Make operator') + '">' + btnLabel + '</button>'
+        : '';
+      return '<span class="mc-player ' + (isOp ? 'mc-player-op' : '') + '">' +
+        esc(p) + opBadge + btn + '</span>';
+    }).join('');
+    const hidden = mc.hidden_players > 0
+      ? '<span class="mc-player mc-player-hidden">+' + mc.hidden_players + ' hidden</span>' : '';
+    const playersBlock = playerChips + hidden || '<span class="empty">no players online</span>';
+
+    const allOps = mc.ops || [];
+    const opsBlock = allOps.length
+      ? allOps.map(o => {
+          const online = onlineOps.has(o.name.toLowerCase());
+          return '<span class="mc-player ' + (online ? 'mc-player-op-online' : '') +
+            '" title="level ' + o.level + (online ? ' · online' : '') + '">' +
+            esc(o.name) + '<span class="mc-op-level">L' + o.level + '</span></span>';
+        }).join('')
+      : '<span class="empty">' + (mc.ops ? 'no ops defined' : 'mount MC_DATA_DIR to see ops') + '</span>';
 
     const mods = (mc.mods || []).map(m => '<div class="mod-chip">' + esc(m) + '</div>').join('') ||
       '<span class="empty">no mods</span>';
+
+    const playersHeader = '<h3>Online players' +
+      (rcon ? '' : ' <span class="mc-rcon-hint">(set MC_RCON_PASSWORD to enable op/deop)</span>') +
+      '</h3>';
 
     $('detail-body').innerHTML =
       '<div class="detail-section">' +
@@ -547,12 +601,53 @@
         '</div>' +
       '</div>' +
       '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
-      '<div class="detail-section"><h3>Online players</h3>' +
+      '<div class="detail-section">' + playersHeader +
         '<div class="mc-players">' + playersBlock + '</div>' +
       '</div>' +
+      '<div class="detail-section"><h3>Operators (' + allOps.length + ')</h3>' +
+        '<div class="mc-players">' + opsBlock + '</div>' +
+      '</div>' +
       (mc.mod_count > 0 ?
-        '<div class="detail-section"><h3>Mods (' + mc.mod_count + ')</h3>' +
-          '<div class="mods-grid">' + mods + '</div></div>' : '');
+        '<div class="detail-section"><h3>Mods (' + mc.mod_count + ')' +
+          (mc.mod_source ? ' <span class="mc-rcon-hint">via ' + esc(mc.mod_source) + '</span>' : '') +
+          '</h3><div class="mods-grid">' + mods + '</div></div>' : '');
+
+    wireMcOpButtons();
+  }
+
+  function wireMcOpButtons() {
+    document.querySelectorAll('.mc-op-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const action = btn.getAttribute('data-action');
+        const player = btn.getAttribute('data-player');
+        if (!confirm((action === 'op' ? 'Make ' : 'Remove operator from ') + player + '?')) return;
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = '…';
+        try {
+          const r = await fetch('/api/minecraft/' + action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (r.ok && data.ok) {
+            flashBtn(btn, '✓', 'ok', original);
+            // Force a refresh so the button flips state.
+            setTimeout(renderDetail, 800);
+          } else {
+            flashBtn(btn, 'failed', 'warn', original);
+            console.error('mc op action failed', data);
+          }
+        } catch (err) {
+          flashBtn(btn, 'failed', 'warn', original);
+          console.error(err);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
   }
 
   // Track which torrent hashes the user has selected for bulk actions.

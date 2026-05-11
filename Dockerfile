@@ -49,6 +49,8 @@ ENV PORT=8090 \
     MC_DATA_DIR= \
     MC_RCON_PORT=25575 \
     MC_RCON_PASSWORD= \
+    DB_PATH=/data/db/brainless.db \
+    DB_RETENTION_DAYS=14 \
     HTTPS_CERT= \
     HTTPS_KEY= \
     ACME_DOMAIN= \
@@ -62,7 +64,7 @@ ENV PORT=8090 \
 RUN useradd -r -u 1001 monitor \
     && chown -R monitor:monitor /srv \
     && chmod +x /entrypoint.sh \
-    && mkdir -p /data/certs
+    && mkdir -p /data/certs /data/db
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "\

@@ -1,14 +1,25 @@
 """FastAPI application serving Unraid monitoring dashboard."""
 import os
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, Query
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import stats
+from . import db, stats
 
-app = FastAPI(title="Brainless-Dash", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db.init()
+    if db.enabled():
+        stats.start_history_sampler()
+    yield
+
+
+app = FastAPI(title="Brainless-Dash", version="1.0.0", lifespan=lifespan)
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -19,7 +30,11 @@ REFRESH_MS = int(os.environ.get("REFRESH_MS", "2000"))
 @app.get("/api/config")
 def client_config():
     """Configuration consumed by the frontend at startup."""
-    return {"refresh_ms": REFRESH_MS}
+    return {
+        "refresh_ms":     REFRESH_MS,
+        "history_enabled": db.enabled(),
+        "history_days":   db.retention_days(),
+    }
 
 
 @app.get("/api/health")
@@ -113,6 +128,56 @@ def minecraft_op_action(action: str, payload: dict = Body(default={})):
     player = (payload.get("player") or "").strip()
     result = stats.mc_op_action(action, player)
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
+_HISTORY_RANGES = {
+    # range key → (seconds back, default bucket size in seconds)
+    "1h":  (3600,            60),
+    "6h":  (6 * 3600,        60),
+    "24h": (24 * 3600,       60),
+    "7d":  (7 * 86400,       300),    # 5-minute buckets
+    "14d": (14 * 86400,      900),    # 15-minute buckets
+    "30d": (30 * 86400,      1800),   # 30-minute buckets
+    "90d": (90 * 86400,      3600),
+    "1y":  (365 * 86400,     14400),  # 4h
+}
+
+
+@app.get("/api/history/metrics")
+def history_metrics():
+    """Distinct metric names available in the time-series store."""
+    if not db.enabled():
+        return JSONResponse({"available": False, "metrics": []})
+    return {"available": True, "metrics": db.known_metrics(), "retention_days": db.retention_days()}
+
+
+@app.get("/api/history/series")
+def history_series(metric: str = Query(...), range: str = Query("24h")):
+    """Return [{ts, avg, min, max}] for one metric over the requested range."""
+    if not db.enabled():
+        return JSONResponse({"available": False, "points": []})
+    if range not in _HISTORY_RANGES:
+        return JSONResponse(
+            {"available": False, "error": f"range must be one of {list(_HISTORY_RANGES)}"},
+            status_code=400,
+        )
+    seconds_back, bucket = _HISTORY_RANGES[range]
+    since = int(time.time()) - seconds_back
+    return {
+        "available":  True,
+        "metric":     metric,
+        "range":      range,
+        "bucket_sec": bucket,
+        "points":     db.metric_series(metric, since, bucket_seconds=bucket),
+    }
+
+
+@app.get("/api/minecraft/playtime")
+def minecraft_playtime():
+    """Per-player cumulative playtime plus any sessions in progress."""
+    if not db.enabled():
+        return JSONResponse({"available": False, "players": [], "active": []})
+    return db.mc_playtime()
 
 
 # Serve static frontend from root

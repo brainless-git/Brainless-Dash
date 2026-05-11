@@ -28,6 +28,8 @@ A lightweight, mobile-first web dashboard for monitoring an Unraid server. Runs 
 - Live network throughput (download and upload bytes/second)
 - Auto-refresh (configurable interval), mobile-first responsive layout
 - Dark Unraid-themed UI, runs as non-root, no privileged mode required
+- Historical trends sparklines on each module drill-down (SQLite-backed, configurable retention)
+- Minecraft per-player playtime tracking with a leaderboard
 
 **Optional integrations**
 - [Plex](#plex) — active streams, user, player, transcode vs direct play, progress
@@ -90,6 +92,13 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `REFRESH_MS` | `2000` | Frontend poll interval in milliseconds. Minimum 500. |
 | `LOG_LEVEL` | `info` | Uvicorn log level: `critical`, `error`, `warning`, `info`, `debug`, `trace`. |
 | `TZ` | (unset) | IANA timezone string, e.g. `Australia/Sydney`, `America/New_York`. |
+
+### History database
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_PATH` | `/data/db/brainless.db` | Path inside the container to the SQLite history database. Mount a writable volume at the parent directory (e.g. `/data/db`) or history disables itself silently. |
+| `DB_RETENTION_DAYS` | `14` | Days of historical metric samples and Minecraft per-session detail rows to keep. Minimum 1, maximum 365. Per-player Minecraft totals are retained indefinitely. |
 
 ### Plex
 
@@ -158,12 +167,38 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `/proc` | `/proc` | ro | CPU, memory, network counters, load averages |
 | `/mnt` | `/mnt` | ro | Unraid array disks, cache pools for capacity reporting |
 | `/data/certs` | e.g. `/mnt/user/appdata/brainless-dash/certs` | rw | ACME certificate storage (required for Let's Encrypt) |
+| `/data/db` | e.g. `/mnt/user/appdata/brainless-dash/db` | rw | SQLite history database (required for trends and Minecraft playtime tracking) |
 
-The `/data/certs` mount is only needed if you use ACME or manual cert files.
+The `/data/certs` mount is only needed if you use ACME or manual cert files. The `/data/db` mount is only needed if you want historical trends and playtime tracking — without it, the DB layer disables itself silently and the drill-downs hide their Trends sections.
 
 ---
 
 ## Optional integrations
+
+### History and trends
+
+When the `/data/db` volume is mounted, Brainless-Dash keeps a small SQLite database of:
+
+- **System and integration metrics** — CPU, memory, swap, network throughput, per-sensor temperatures, per-disk usage, qBittorrent down/up speed and torrent counts, SABnzbd queue depth, Plex active streams, Minecraft players online and latency. Sampled every 30 seconds, rolled up to **1-minute averages** before being written, and pruned after `DB_RETENTION_DAYS` (default 14, max 365).
+- **Minecraft player sessions** — for each player, every observed session (start/end), plus a cumulative per-player total (`mc_playtime`) that is **never pruned**. Sessions are detected from the SLP player sample list, so brief sessions shorter than the 30-second poll cadence may be missed and players hidden by the server's sample limit are not tracked.
+
+Each module's drill-down page renders a small **Trends** section with sparklines for the most relevant metrics over the last 24 hours. The Minecraft drill-down adds a **Playtime leaderboard** ordered by total time, with the currently-online players highlighted.
+
+Without the `/data/db` mount the database disables itself silently — drill-downs hide their Trends sections and the playtime leaderboard shows a "history disabled" hint.
+
+#### Security
+
+The DB file is created with mode `0600`, owned by the in-container `monitor` user (UID 1001). It contains no credentials — only metric values and Minecraft player names from the public SLP roster. There is no remote DB connection: the SQLite file is local to the container.
+
+```yaml
+volumes:
+  - /mnt/user/appdata/brainless-dash/db:/data/db
+environment:
+  - DB_PATH=/data/db/brainless.db   # default
+  - DB_RETENTION_DAYS=14            # default; max 365
+```
+
+---
 
 ### Plex
 
@@ -486,6 +521,9 @@ Edit `docker-compose.yml` to set your credentials before running.
 | `/api/minecraft` | GET | Minecraft server status, operators, gamemode, mods (404 if not configured) |
 | `/api/minecraft/op` | POST | Run `/op <player>` via RCON — body `{"player": "<name>"}` |
 | `/api/minecraft/deop` | POST | Run `/deop <player>` via RCON — body `{"player": "<name>"}` |
+| `/api/minecraft/playtime` | GET | Per-player cumulative playtime plus sessions in progress (requires the history DB) |
+| `/api/history/metrics` | GET | Distinct metric names recorded in the history DB |
+| `/api/history/series` | GET | Time-series for one metric. Query: `metric=<name>&range=1h\|6h\|24h\|7d\|14d\|30d\|90d\|1y` |
 
 All responses are JSON. The dashboard polls `/api/stats` (compact), while each drill-down page polls the matching per-integration endpoint to render the richer view.
 

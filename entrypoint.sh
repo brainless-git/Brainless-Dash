@@ -36,6 +36,16 @@ CERTDIR=/data/certs
 mkdir -p "$CERTDIR"
 chown monitor:monitor "$CERTDIR"
 
+# History DB lives next to certs by default. Same trick: ensure the parent
+# directory exists and is writable by the monitor user before dropping privs.
+if [ -n "${DB_PATH:-}" ]; then
+    DB_DIR=$(dirname "$DB_PATH")
+else
+    DB_DIR=/data/db
+fi
+mkdir -p "$DB_DIR"
+chown monitor:monitor "$DB_DIR"
+
 if [ -n "$ACME_DOMAIN" ] && [ -n "$ACME_EMAIL" ]; then
     LIVE="$CERTDIR/live/$ACME_DOMAIN"
 

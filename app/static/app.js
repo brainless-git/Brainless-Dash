@@ -1,6 +1,8 @@
 /* Unraid Monitor frontend */
 (() => {
   let REFRESH_MS = 2000;
+  let HISTORY_ENABLED = false;
+  let HISTORY_DAYS = 14;
 
   const $ = (id) => document.getElementById(id);
 
@@ -13,6 +15,28 @@
   }
 
   function fmtRate(bps) { return fmtBytes(bps) + '/s'; }
+
+  function fmtDuration(secs) {
+    if (secs == null || isNaN(secs)) return '—';
+    const s = Math.max(0, Math.floor(secs));
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const parts = [];
+    if (d) parts.push(d + 'd');
+    if (h || d) parts.push(h + 'h');
+    parts.push(m + 'm');
+    return parts.join(' ');
+  }
+
+  function fmtRelative(ts) {
+    if (!ts) return '—';
+    const diff = Math.floor(Date.now() / 1000) - ts;
+    if (diff < 60)   return 'just now';
+    if (diff < 3600) return Math.floor(diff / 60)   + ' min ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + ' h ago';
+    return Math.floor(diff / 86400) + ' d ago';
+  }
 
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -623,6 +647,11 @@
       (rcon ? '' : ' <span class="mc-rcon-hint">(set MC_RCON_PASSWORD to enable op/deop)</span>') +
       '</h3>';
 
+    const trendSpecs = [
+      { label: 'Players online', metric: 'mc.players_online', color: '#4caf50', yMin: 0, fmt: v => v.toFixed(0) },
+      { label: 'Latency (ms)',   metric: 'mc.latency_ms',     color: '#2196f3', fmt: v => v.toFixed(0) + 'ms' },
+    ];
+
     $('detail-body').innerHTML =
       '<div class="detail-section">' +
         '<div class="mc-detail-banner">' + favHtml +
@@ -632,6 +661,8 @@
       '</div>' +
       (diagHtml ? '<div class="detail-section">' + diagHtml + '</div>' : '') +
       '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
+      trendsSectionHtml(trendSpecs, '24h') +
+      '<div class="detail-section" id="mc-playtime-section"><h3>Playtime leaderboard <span class="mc-rcon-hint">loading…</span></h3></div>' +
       '<div class="detail-section">' + playersHeader +
         '<div class="mc-players">' + playersBlock + '</div>' +
       '</div>' +
@@ -647,6 +678,58 @@
       '</div>';
 
     wireMcOpButtons();
+    populateTrends(trendSpecs, '24h');
+    populateMcPlaytime();
+  }
+
+  async function populateMcPlaytime() {
+    const section = $('mc-playtime-section');
+    if (!section) return;
+    if (!HISTORY_ENABLED) {
+      section.innerHTML = '<h3>Playtime leaderboard</h3>' +
+        '<div class="empty">history disabled — mount a writable volume at the DB_PATH to enable</div>';
+      return;
+    }
+    let data;
+    try {
+      const r = await fetch('/api/minecraft/playtime', { cache: 'no-store' });
+      data = await r.json();
+    } catch (e) {
+      section.innerHTML = '<h3>Playtime leaderboard</h3><div class="empty">failed to load</div>';
+      return;
+    }
+    const players = data.players || [];
+    const activeMap = {};
+    (data.active || []).forEach(a => { activeMap[a.player] = a.start_ts; });
+    const now = Math.floor(Date.now() / 1000);
+
+    if (!players.length) {
+      section.innerHTML = '<h3>Playtime leaderboard</h3>' +
+        '<div class="empty">no playtime recorded yet — wait for the next MC poll</div>';
+      return;
+    }
+
+    const rows = players.map((p, idx) => {
+      const liveSecs = activeMap[p.player] != null ? (now - activeMap[p.player]) : 0;
+      const total = p.total_seconds + liveSecs;
+      const isActive = activeMap[p.player] != null;
+      return '<tr class="' + (isActive ? 'pt-active' : '') + '">' +
+        '<td class="pt-rank">' + (idx + 1) + '</td>' +
+        '<td class="pt-name">' + esc(p.player) +
+          (isActive ? ' <span class="pt-live">LIVE</span>' : '') + '</td>' +
+        '<td class="pt-total">' + fmtDuration(total) + '</td>' +
+        '<td class="pt-sessions">' + p.sessions + (isActive ? '+' : '') + '</td>' +
+        '<td class="pt-last">' + fmtRelative(p.last_seen) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    section.innerHTML =
+      '<h3>Playtime leaderboard <span class="mc-rcon-hint">' + players.length +
+        ' player' + (players.length === 1 ? '' : 's') + ' tracked</span></h3>' +
+      '<table class="pt-table">' +
+        '<thead><tr><th>#</th><th>Player</th><th>Total</th><th>Sessions</th><th>Last seen</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>';
   }
 
   function wireMcOpButtons() {
@@ -745,13 +828,22 @@
         '<span class="qb-selected-count" id="qb-selected-count"></span>' +
       '</div>';
 
+    const trendSpecs = [
+      { label: 'Download (B/s)', metric: 'qb.dl_speed', color: '#e22828', yMin: 0, fmt: v => fmtRate(v) },
+      { label: 'Upload (B/s)',   metric: 'qb.ul_speed', color: '#4caf50', yMin: 0, fmt: v => fmtRate(v) },
+      { label: 'Downloading',    metric: 'qb.downloading', color: '#ff9800', yMin: 0, fmt: v => v.toFixed(0) },
+      { label: 'Seeding',        metric: 'qb.seeding',     color: '#2196f3', yMin: 0, fmt: v => v.toFixed(0) },
+    ];
+
     $('detail-body').innerHTML =
       '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
+      trendsSectionHtml(trendSpecs, '24h') +
       '<div class="detail-section"><h3>Torrents</h3>' + actionsBar +
         '<div class="tor-list">' + torrents + '</div></div>';
 
     updateQbSelectedCount();
     wireQbActions();
+    populateTrends(trendSpecs, '24h');
   }
 
   function updateQbSelectedCount() {
@@ -854,9 +946,16 @@
       '</div>';
     }).join('') || '<div class="empty">queue empty</div>';
 
+    const trendSpecs = [
+      { label: 'Queue depth', metric: 'sab.queue_count', color: '#f5a623', yMin: 0, fmt: v => v.toFixed(0) },
+    ];
+
     $('detail-body').innerHTML =
       '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
+      trendsSectionHtml(trendSpecs, '24h') +
       '<div class="detail-section"><h3>Queue</h3><div class="slot-list">' + slots + '</div></div>';
+
+    populateTrends(trendSpecs, '24h');
   }
 
   function renderSonarrDetail(sonarr) {
@@ -964,7 +1063,85 @@
       }).join('');
       body += '<div class="detail-section"><h3>Sessions</h3>' + items + '</div>';
     }
-    $('detail-body').innerHTML = body;
+    const trendSpecs = [
+      { label: 'Active streams', metric: 'plex.stream_count', color: '#e5a00d', yMin: 0, fmt: v => v.toFixed(0) },
+    ];
+    $('detail-body').innerHTML = body + trendsSectionHtml(trendSpecs, '24h');
+    populateTrends(trendSpecs, '24h');
+  }
+
+  // ── History / sparkline helpers ────────────────────────────────────────────
+
+  // Renders a series into an SVG element. data: [{ts, avg, min, max}].
+  // Uses a 100x30 viewBox; CSS controls actual size.
+  function renderSparkline(svg, data, opts) {
+    opts = opts || {};
+    if (!data || data.length === 0) {
+      svg.innerHTML = '<text x="50" y="20" text-anchor="middle" font-size="8" fill="#666">no data</text>';
+      return;
+    }
+    const xs = data.map(d => d.ts);
+    const ys = data.map(d => d.avg);
+    const xmin = xs[0], xmax = xs[xs.length - 1] || (xmin + 1);
+    const yMinFloor = opts.yMin != null ? opts.yMin : Math.min(...ys);
+    const yMaxCeil  = opts.yMax != null ? opts.yMax : Math.max(...ys);
+    const yspan = (yMaxCeil - yMinFloor) || 1;
+    const xspan = (xmax - xmin) || 1;
+    const points = data.map(d => {
+      const x = ((d.ts - xmin) / xspan) * 100;
+      const y = 28 - ((d.avg - yMinFloor) / yspan) * 26;
+      return x.toFixed(2) + ',' + y.toFixed(2);
+    }).join(' ');
+    const lastY = ys[ys.length - 1];
+    const color = opts.color || '#e22828';
+    svg.innerHTML =
+      '<polyline points="' + points + '" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linejoin="round"/>' +
+      '<polyline points="0,30 ' + points + ' 100,30" fill="' + color + '" fill-opacity="0.12" stroke="none"/>' +
+      '<text x="98" y="9" text-anchor="end" font-size="7" fill="#9a9a9a">' +
+        (opts.fmt ? opts.fmt(lastY) : lastY.toFixed(1)) +
+      '</text>';
+  }
+
+  async function fetchSeries(metric, range) {
+    range = range || '24h';
+    try {
+      const r = await fetch('/api/history/series?metric=' + encodeURIComponent(metric) +
+        '&range=' + encodeURIComponent(range), { cache: 'no-store' });
+      if (!r.ok) return [];
+      const data = await r.json();
+      return data.points || [];
+    } catch (e) {
+      console.error('history fetch failed', metric, e);
+      return [];
+    }
+  }
+
+  // Build a Trends section from a list of {label, metric, color, fmt, yMin, yMax}.
+  // Returns the HTML scaffold; populate the SVGs asynchronously.
+  function trendsSectionHtml(specs, range) {
+    if (!HISTORY_ENABLED) return '';
+    return '<div class="detail-section trends-section">' +
+      '<h3>Trends <span class="mc-rcon-hint">last ' + esc(range) + ' — retention ' + HISTORY_DAYS + ' days</span></h3>' +
+      '<div class="trends-grid">' +
+        specs.map((s, i) => {
+          return '<div class="trend">' +
+            '<div class="trend-label">' + esc(s.label) + '</div>' +
+            '<svg class="spark" data-trend="' + i + '" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>' +
+          '</div>';
+        }).join('') +
+      '</div>' +
+    '</div>';
+  }
+
+  async function populateTrends(specs, range) {
+    if (!HISTORY_ENABLED) return;
+    range = range || '24h';
+    const svgs = document.querySelectorAll('svg.spark[data-trend]');
+    await Promise.all(specs.map(async (spec, i) => {
+      const data = await fetchSeries(spec.metric, range);
+      const svg = svgs[i];
+      if (svg) renderSparkline(svg, data, spec);
+    }));
   }
 
   function attachModuleClicks() {
@@ -990,6 +1167,8 @@
       if (r.ok) {
         const cfg = await r.json();
         if (cfg.refresh_ms && cfg.refresh_ms >= 500) REFRESH_MS = cfg.refresh_ms;
+        HISTORY_ENABLED = !!cfg.history_enabled;
+        HISTORY_DAYS    = cfg.history_days || 14;
       }
     } catch (e) { /* use default */ }
     applyRoute();

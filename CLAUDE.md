@@ -88,6 +88,10 @@ Public GitHub repo: `brainless-git/brainless-dash`. Image is published to Docker
 
 - Writing to or modifying the Unraid host
 - Authentication, user accounts, multi-user features (LAN-only tool)
-- Historical metrics or time-series storage (Grafana + Prometheus is the right tool for that)
+- Replacing dedicated time-series stores. The built-in SQLite history (see below) is for at-a-glance trends and Minecraft playtime — not for long-retention dashboards. For full historical analysis, Grafana + Prometheus is still the right tool.
 - Alerting
 - Rewriting the frontend in React or any framework
+
+## History storage
+
+A SQLite database at `DB_PATH` (default `/data/db/brainless.db`) stores 1-minute-bucketed metric averages and Minecraft player session data. Retention is `DB_RETENTION_DAYS` (default 14, max 365). The per-player `mc_playtime` totals are retained indefinitely; only the per-session detail rows and time-series buckets are pruned. The DB lives in `app/db.py`; the schema is created on startup if missing. WAL mode + a background flusher thread keeps the writes off the request path. If `DB_PATH`'s parent directory cannot be created (no volume mount), history disables itself silently and `db.enabled()` returns `False`.

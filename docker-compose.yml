@@ -15,6 +15,9 @@ services:
       - /proc:/proc:ro
       - /mnt:/mnt:ro
       - /mnt/user/appdata/brainless-dash/certs:/data/certs
+      # Persistent storage for the historical-trends SQLite DB. Drop this
+      # mount and history disables itself silently.
+      - /mnt/user/appdata/brainless-dash/db:/data/db
     environment:
       - TZ=Australia/Sydney
       - PORT=8090
@@ -41,6 +44,9 @@ services:
       # Set enable-rcon=true and rcon.password in your server.properties first.
       - MC_RCON_PORT=25575
       - MC_RCON_PASSWORD=
+      # Historical trends + Minecraft playtime tracking
+      - DB_PATH=/data/db/brainless.db
+      - DB_RETENTION_DAYS=14
       # Manual cert paths (skip if using ACME_DOMAIN below)
       - HTTPS_CERT=
       - HTTPS_KEY=

@@ -17,6 +17,8 @@ import psutil
 from datetime import date, timedelta
 from pathlib import Path
 
+from . import db
+
 log = logging.getLogger(__name__)
 
 # ── Runtime config ─────────────────────────────────────────────────────────────
@@ -1007,6 +1009,14 @@ def _mc_worker():
         result = _fetch_minecraft()
         with _mc_lock:
             _mc_result = result
+        # Feed the player roster into the playtime tracker. Hidden players
+        # (visible only as "+N hidden" on the card) are skipped because we
+        # cannot identify them by name.
+        if result.get("online"):
+            db.mc_tick(result.get("players") or [])
+            db.record_sample("mc.players_online", result.get("players_online", 0))
+            if result.get("latency_ms") is not None:
+                db.record_sample("mc.latency_ms", result["latency_ms"])
         time.sleep(30)
 
 
@@ -1088,6 +1098,41 @@ def _compact_sonarr(sonarr):
     return {**sonarr, "episodes": eps}
 
 
+def _record_history(result: dict) -> None:
+    """Sample fields into the time-series store. Cheap; called per /api/stats."""
+    cpu = result.get("cpu") or {}
+    db.record_sample("cpu.percent",  cpu.get("percent"))
+    db.record_sample("cpu.load_1m",  cpu.get("load_1m"))
+    mem = result.get("memory") or {}
+    db.record_sample("mem.percent",       mem.get("percent"))
+    db.record_sample("mem.swap_percent",  mem.get("swap_percent"))
+    net = result.get("network") or {}
+    db.record_sample("net.recv_bps", net.get("rate_recv_bps"))
+    db.record_sample("net.sent_bps", net.get("rate_sent_bps"))
+    for sensor in (result.get("temps") or []):
+        label = (sensor.get("label") or "").strip().replace(" ", "_").lower()
+        if label:
+            db.record_sample(f"temp.{label}", sensor.get("current"))
+    storage = result.get("storage") or {}
+    for disk in (storage.get("disks") or []):
+        name = (disk.get("name") or "").strip().lower()
+        if name:
+            db.record_sample(f"disk.{name}.percent", disk.get("percent"))
+    qb = result.get("qbittorrent")
+    if qb and qb.get("available"):
+        db.record_sample("qb.dl_speed",    qb.get("dl_speed"))
+        db.record_sample("qb.ul_speed",    qb.get("ul_speed"))
+        db.record_sample("qb.downloading", qb.get("downloading"))
+        db.record_sample("qb.seeding",     qb.get("seeding"))
+        db.record_sample("qb.total",       qb.get("total"))
+    sab = result.get("sabnzbd")
+    if sab and sab.get("available"):
+        db.record_sample("sab.queue_count", sab.get("queue_count"))
+    plex = result.get("plex")
+    if plex and plex.get("available"):
+        db.record_sample("plex.stream_count", plex.get("stream_count"))
+
+
 def collect_all():
     result = {
         "timestamp": int(time.time()),
@@ -1114,4 +1159,19 @@ def collect_all():
     mc = get_minecraft()
     if mc is not None:
         result["minecraft"] = _compact_minecraft(mc)
+    _record_history(result)
     return result
+
+
+def _history_sampler():
+    """Independent ticker so history accumulates even when no browser is open."""
+    while True:
+        time.sleep(30)
+        try:
+            collect_all()
+        except Exception as exc:    # pragma: no cover - defensive
+            log.warning("history sampler tick failed: %s", exc)
+
+
+def start_history_sampler():
+    threading.Thread(target=_history_sampler, daemon=True, name="history-sampler").start()

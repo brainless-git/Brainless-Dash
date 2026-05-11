@@ -811,6 +811,72 @@ body {
   color: var(--accent);
 }
 
+/* Trends sparklines */
+.trends-section h3 { margin-bottom: 8px; }
+.trends-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+.trend {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  padding: 8px 10px;
+}
+.trend-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+.spark {
+  width: 100%;
+  height: 36px;
+  display: block;
+}
+
+/* Minecraft playtime leaderboard */
+.pt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.pt-table th, .pt-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-soft);
+}
+.pt-table th {
+  color: var(--text-faint);
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.pt-table tbody tr:last-child td { border-bottom: none; }
+.pt-rank { color: var(--text-faint); width: 28px; }
+.pt-name { color: var(--text); font-weight: 600; }
+.pt-total { color: var(--accent); font-weight: 600; white-space: nowrap; }
+.pt-sessions { color: var(--text-dim); width: 80px; }
+.pt-last { color: var(--text-faint); white-space: nowrap; }
+.pt-active .pt-name { color: var(--ok); }
+.pt-live {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 8px;
+  font-weight: 700;
+  background: var(--ok);
+  color: #fff;
+  border-radius: 2px;
+  vertical-align: middle;
+  letter-spacing: 0.08em;
+}
+
 /* Detail: minecraft */
 .mc-detail-banner {
   display: flex;

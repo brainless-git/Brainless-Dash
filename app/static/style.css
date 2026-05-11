@@ -168,13 +168,35 @@ body {
 }
 .resource-value { color: var(--text); }
 
-/* Temperature graph */
-#temp-canvas {
-  width: 100%;
-  height: 140px;
-  display: block;
-  margin-bottom: 10px;
+/* Temperature sensor list (main card) */
+.sensor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
+.sensor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.sensor-row-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sensor-row-label {
+  flex: 1;
+  color: var(--text-dim);
+}
+.sensor-row-value { font-weight: 600; color: var(--text); }
+.sensor-row-value.warn { color: var(--warn); }
+.sensor-row-value.crit { color: var(--crit); }
+.sensor-sep { height: 1px; background: var(--border-soft); margin: 4px 0; }
+
+/* Temperature graph (detail view canvas) */
 .temp-legend {
   display: flex;
   flex-wrap: wrap;
@@ -903,6 +925,161 @@ body {
   line-height: 1.5;
 }
 
+/* Sys drilldown cards (temps, network, storage) */
+.sys-drilldown {
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.sys-drilldown:hover,
+.sys-drilldown:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+.sys-drilldown:active { transform: scale(0.998); }
+.card-head-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chevron {
+  color: var(--text-faint);
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Detail: sensor list */
+.sensor-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sensor-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+}
+.sensor-detail-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sensor-detail-chip { color: var(--text-faint); font-size: 10px; min-width: 80px; }
+.sensor-detail-label { flex: 1; color: var(--text-dim); }
+.sensor-detail-temp { font-weight: 600; color: var(--text); white-space: nowrap; }
+.sensor-detail-temp.warn { color: var(--warn); }
+.sensor-detail-temp.crit { color: var(--crit); }
+.sensor-detail-limits { color: var(--text-faint); font-size: 10px; white-space: nowrap; }
+
+/* Detail: fan list */
+.fan-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fan-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+}
+.fan-detail-chip { color: var(--text-faint); font-size: 10px; min-width: 80px; }
+.fan-detail-label { flex: 1; color: var(--text-dim); }
+.fan-detail-rpm { font-weight: 600; color: var(--text); }
+.fan-detail-rpm.warn { color: var(--warn); }
+
+/* Detail: network graph legend */
+.net-graph-legend {
+  display: flex;
+  gap: 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.net-legend-item { display: flex; align-items: center; gap: 6px; }
+.net-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Detail: interface list */
+.iface-list { display: flex; flex-direction: column; gap: 8px; }
+.iface-item {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  padding: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.iface-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+  gap: 8px;
+}
+.iface-name { font-weight: 600; color: var(--text); }
+.iface-rates { color: var(--accent); font-size: 12px; white-space: nowrap; }
+.iface-totals { color: var(--text-faint); font-size: 10px; }
+
+/* Detail: storage extended */
+.disk-head-right { display: flex; align-items: baseline; gap: 8px; }
+.disk-fstype {
+  font-size: 9px;
+  padding: 1px 5px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.disk-detail-sub {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  gap: 8px;
+}
+.disk-mount {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.disk-free { white-space: nowrap; flex-shrink: 0; }
+
+/* Detail: mdstat */
+.mdstat-block {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  padding: 10px 12px;
+  line-height: 1.6;
+}
+
 @media (min-width: 700px) {
   .detail { padding: 16px; }
   .detail-stats { grid-template-columns: repeat(3, 1fr); }
@@ -919,7 +1096,7 @@ body {
     gap: 16px;
   }
   /* Span full width on tablet; overridden at desktop */
-  #card-system, #card-resources, #card-temps, #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
+  #card-system, #card-resources, #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
   body { font-size: 14px; }
   .rate-value { font-size: 18px; }
 }
@@ -930,10 +1107,9 @@ body {
     grid-template-columns: repeat(3, 1fr);
     grid-auto-flow: row dense;
   }
-  /* Let system + resources sit in-row; only temps/sonarr/plex stay full-width */
+  /* Let system + resources sit in-row; sonarr/plex/minecraft stay full-width */
   #card-system, #card-resources { grid-column: auto; }
-  #card-temps, #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
-  #temp-canvas { height: 180px; }
+  #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
 }
 
 /* Wide desktop — 4 columns, cards pair up side-by-side */
@@ -947,7 +1123,6 @@ body {
   #card-system, #card-resources,
   #card-storage, #card-network,
   #card-sabnzbd, #card-qbittorrent { grid-column: span 2; }
-  #card-temps, #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
+  #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
   .rate-value { font-size: 20px; }
-  #temp-canvas { height: 220px; }
 }

@@ -76,6 +76,7 @@ _CPU_PACKAGE_PRIORITY = [
 
 # ── Network rate state ─────────────────────────────────────────────────────────
 _net_cache = {"time": None, "bytes_sent": 0, "bytes_recv": 0}
+_net_iface_prev = {}  # name → (bytes_sent, bytes_recv)
 
 
 # ── CPU ────────────────────────────────────────────────────────────────────────
@@ -161,6 +162,25 @@ def get_temps():
     return sensors
 
 
+def get_fans():
+    """Return fan speed readings from all hardware monitoring chips."""
+    fans = []
+    try:
+        fan_data = psutil.sensors_fans()
+    except (AttributeError, OSError):
+        return fans
+    for chip, entries in (fan_data or {}).items():
+        for entry in entries:
+            if entry.current is None:
+                continue
+            fans.append({
+                "chip":  chip,
+                "label": entry.label or chip,
+                "rpm":   round(entry.current),
+            })
+    return fans
+
+
 # ── Storage ────────────────────────────────────────────────────────────────────
 
 def _read_mdstat():
@@ -185,6 +205,13 @@ def get_storage():
             if child.name.startswith(("disk", "cache")):
                 unraid_mounts.append(str(child))
 
+    fstype_map = {}
+    try:
+        for p in psutil.disk_partitions(all=True):
+            fstype_map[p.mountpoint] = p.fstype
+    except Exception:
+        pass
+
     candidates = unraid_mounts or [
         p.mountpoint for p in psutil.disk_partitions(all=False)
         if p.fstype and not p.mountpoint.startswith(("/proc", "/sys", "/dev"))
@@ -205,6 +232,7 @@ def get_storage():
             "used":    usage.used,
             "free":    usage.free,
             "percent": usage.percent,
+            "fstype":  fstype_map.get(path, ""),
         })
 
     return {"disks": disks, "array_status": _read_mdstat()}
@@ -215,33 +243,52 @@ def get_storage():
 def get_network():
     counters = psutil.net_io_counters(pernic=True)
     now = time.time()
-    iface_names = []
+    ifaces = []
     total_sent = 0
     total_recv = 0
+
+    delta = 0.0
+    if _net_cache["time"] is not None:
+        delta = now - _net_cache["time"]
 
     for name, c in counters.items():
         if name == "lo" or name.startswith(("docker", "veth", "br-")):
             continue
-        iface_names.append(name)
         total_sent += c.bytes_sent
         total_recv += c.bytes_recv
 
+        rate_s = 0.0
+        rate_r = 0.0
+        if name in _net_iface_prev and delta > 0:
+            ps, pr = _net_iface_prev[name]
+            rate_s = max(0, (c.bytes_sent - ps) / delta)
+            rate_r = max(0, (c.bytes_recv - pr) / delta)
+        _net_iface_prev[name] = (c.bytes_sent, c.bytes_recv)
+
+        ifaces.append({
+            "name":          name,
+            "rate_sent_bps": rate_s,
+            "rate_recv_bps": rate_r,
+            "bytes_sent":    c.bytes_sent,
+            "bytes_recv":    c.bytes_recv,
+        })
+
     rate_sent = 0.0
     rate_recv = 0.0
-    if _net_cache["time"] is not None:
-        delta = now - _net_cache["time"]
-        if delta > 0:
-            rate_sent = max(0, (total_sent - _net_cache["bytes_sent"]) / delta)
-            rate_recv = max(0, (total_recv - _net_cache["bytes_recv"]) / delta)
+    if _net_cache["time"] is not None and delta > 0:
+        rate_sent = max(0, (total_sent - _net_cache["bytes_sent"]) / delta)
+        rate_recv = max(0, (total_recv - _net_cache["bytes_recv"]) / delta)
 
-    _net_cache["time"] = now
+    _net_cache["time"]       = now
     _net_cache["bytes_sent"] = total_sent
     _net_cache["bytes_recv"] = total_recv
 
     return {
-        "interfaces":    [{"name": n} for n in iface_names],
-        "rate_sent_bps": rate_sent,
-        "rate_recv_bps": rate_recv,
+        "interfaces":       ifaces,
+        "rate_sent_bps":    rate_sent,
+        "rate_recv_bps":    rate_recv,
+        "total_bytes_sent": total_sent,
+        "total_bytes_recv": total_recv,
     }
 
 
@@ -1096,6 +1143,7 @@ def collect_all():
         "cpu":       get_cpu(),
         "memory":    get_memory(),
         "temps":     get_temps(),
+        "fans":      get_fans(),
         "storage":   get_storage(),
         "network":   get_network(),
     }

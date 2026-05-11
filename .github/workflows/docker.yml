@@ -1,9 +1,14 @@
 name: Build and push Docker image
 
+# devtest branch publishes to brainless86/brainless-dash-devtest (test channel).
+# main branch publishes to brainless86/brainless-dash (stable, :latest).
+# Promotion flow: feature branch → PR into devtest → PR from devtest into main.
+
 on:
   push:
     branches:
       - main
+      - devtest
   workflow_dispatch:
 
 jobs:
@@ -23,14 +28,31 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Compute image tags
+        id: tags
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            {
+              echo "tags<<EOF"
+              echo "brainless86/brainless-dash:latest"
+              echo "brainless86/brainless-dash:${{ github.sha }}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "tags<<EOF"
+              echo "brainless86/brainless-dash-devtest:latest"
+              echo "brainless86/brainless-dash-devtest:${{ github.sha }}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           platforms: linux/amd64
-          tags: |
-            brainless86/brainless-dash:latest
-            brainless86/brainless-dash:${{ github.sha }}
+          tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

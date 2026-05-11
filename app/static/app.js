@@ -319,6 +319,15 @@
         $('mc-version').textContent = versionParts.join(' · ');
         $('mc-latency').textContent = mc.latency_ms != null ? mc.latency_ms + ' ms' : '';
         $('mc-secure').style.display = mc.enforces_secure_chat ? '' : 'none';
+        const gmEl = $('mc-gamemode');
+        if (mc.gamemode) {
+          gmEl.textContent = mc.hardcore ? mc.gamemode + ' hc' : mc.gamemode;
+          gmEl.className = 'mc-gamemode mc-gm-' + (mc.gamemode || '').toLowerCase() +
+            (mc.hardcore ? ' mc-gm-hardcore' : '');
+          gmEl.style.display = '';
+        } else {
+          gmEl.style.display = 'none';
+        }
         // MOTD: render multi-line if the server returned newlines.
         const motdEl = $('mc-motd');
         const motd = mc.motd || mc.version || '';
@@ -482,6 +491,8 @@
   function applyRoute() {
     const mod = parseHash();
     if (mod === currentModule) return;
+    // Reset transient per-module UI state when changing modules.
+    qbSelected = new Set();
     currentModule = mod;
     if (mod) showDetail(); else showDashboard();
   }
@@ -511,6 +522,21 @@
 
   // ── Detail renderers ────────────────────────────────────────────────────────
 
+  function gamemodeLabel(mc) {
+    const g = (mc.gamemode || '').toLowerCase();
+    if (!g) return '—';
+    const label = g.charAt(0).toUpperCase() + g.slice(1);
+    return mc.hardcore ? label + ' (hardcore)' : label;
+  }
+
+  function gamemodeClass(mc) {
+    const g = (mc.gamemode || '').toLowerCase();
+    if (mc.hardcore) return 'warn';
+    if (g === 'creative') return 'accent';
+    if (g === 'survival') return 'ok';
+    return '';
+  }
+
   function renderMinecraftDetail(mc) {
     if (!mc.online) {
       $('detail-meta').textContent = 'offline';
@@ -522,20 +548,80 @@
     const motdLines = (mc.motd || '').split('\n').map(l => '<div>' + esc(l) + '</div>').join('');
     const favHtml = mc.favicon ? '<img class="mc-favicon" src="' + mc.favicon + '" alt="">' : '';
     const stats =
+      statItem('Gamemode', esc(gamemodeLabel(mc)), gamemodeClass(mc)) +
+      statItem('Difficulty', esc(mc.difficulty || '—')) +
       statItem('Version', esc(mc.version || '—')) +
       statItem('Protocol', mc.protocol != null ? mc.protocol : '—') +
       statItem('Latency', mc.latency_ms != null ? mc.latency_ms + ' ms' : '—') +
       statItem('Players', mc.players_online + ' / ' + mc.players_max, 'accent') +
       statItem('Mods', mc.mod_count || 0) +
-      statItem('Secure chat', mc.enforces_secure_chat ? 'yes' : 'no', mc.enforces_secure_chat ? 'ok' : '');
+      statItem('PvP', mc.pvp ? 'yes' : 'no', mc.pvp ? 'warn' : '');
 
-    const players = (mc.players || []).map(p => '<span class="mc-player">' + esc(p) + '</span>').join('');
-    const hidden = mc.hidden_players > 0 ? '<span class="mc-player mc-player-hidden">+' + mc.hidden_players + ' hidden</span>' : '';
-    const playersBlock = players + hidden ||
-      '<span class="empty">no players online</span>';
+    const onlineOps = new Set((mc.online_op_names || []).map(n => n.toLowerCase()));
+    const rcon = mc.rcon_available;
+
+    const playerChips = (mc.players || []).map(p => {
+      const isOp = onlineOps.has(p.toLowerCase());
+      const opBadge = isOp ? '<span class="mc-op-badge" title="Operator">OP</span>' : '';
+      const action = isOp ? 'deop' : 'op';
+      const btnLabel = isOp ? 'Deop' : 'Op';
+      const btn = rcon
+        ? '<button class="mc-op-btn" data-action="' + action + '" data-player="' + esc(p) +
+            '" title="' + (isOp ? 'Remove operator' : 'Make operator') + '">' + btnLabel + '</button>'
+        : '';
+      return '<span class="mc-player ' + (isOp ? 'mc-player-op' : '') + '">' +
+        esc(p) + opBadge + btn + '</span>';
+    }).join('');
+    const hidden = mc.hidden_players > 0
+      ? '<span class="mc-player mc-player-hidden">+' + mc.hidden_players + ' hidden</span>' : '';
+    const playersBlock = playerChips + hidden || '<span class="empty">no players online</span>';
+
+    const allOps = mc.ops || [];
+    const opsBlock = allOps.length
+      ? allOps.map(o => {
+          const online = onlineOps.has(o.name.toLowerCase());
+          return '<span class="mc-player ' + (online ? 'mc-player-op-online' : '') +
+            '" title="level ' + o.level + (online ? ' · online' : '') + '">' +
+            esc(o.name) + '<span class="mc-op-level">L' + o.level + '</span></span>';
+        }).join('')
+      : '<span class="empty">' + (mc.ops ? 'no ops defined' : 'mount MC_DATA_DIR to see ops') + '</span>';
 
     const mods = (mc.mods || []).map(m => '<div class="mod-chip">' + esc(m) + '</div>').join('') ||
       '<span class="empty">no mods</span>';
+
+    // Build a diagnostic block explaining why ops/mods/gamemode might be
+    // empty. Visible whenever MC_DATA_DIR is misconfigured or empty.
+    const diag = mc.data_dir_diag || {};
+    let diagHtml = '';
+    if (!diag.configured) {
+      diagHtml = '<div class="mc-diag warn">' +
+        '<strong>MC_DATA_DIR is not set.</strong> Without it, the mod count, ' +
+        'operator list, and gamemode cannot be read. ' +
+        'In the Unraid template, MC_DATA_DIR must be an <em>environment variable</em> ' +
+        '(text input), not a Path mount. Set it to a directory inside the container ' +
+        '(typically under <code>/mnt/...</code>, which is already mounted read-only).' +
+        '</div>';
+    } else if (!diag.exists) {
+      diagHtml = '<div class="mc-diag warn">' +
+        '<strong>MC_DATA_DIR is set to <code>' + esc(diag.path) + '</code> but does not exist inside the container.</strong> ' +
+        'The path must be reachable from inside the container (the dashboard mounts the host\'s <code>/mnt</code> read-only).' +
+        '</div>';
+    } else if (!diag.readable) {
+      diagHtml = '<div class="mc-diag warn">' +
+        '<strong>MC_DATA_DIR exists but is not readable.</strong> ' +
+        'The dashboard runs as UID 1001 — make sure the directory is world-readable.' +
+        '</div>';
+    } else if (!diag.has_mods_dir && !diag.has_ops_json && !diag.has_properties) {
+      diagHtml = '<div class="mc-diag warn">' +
+        '<strong>MC_DATA_DIR is readable but contains no <code>mods/</code>, ' +
+        '<code>ops.json</code>, or <code>server.properties</code>.</strong> ' +
+        'Check the path (<code>' + esc(diag.path) + '</code>) really points at the Minecraft server\'s data dir.' +
+        '</div>';
+    }
+
+    const playersHeader = '<h3>Online players' +
+      (rcon ? '' : ' <span class="mc-rcon-hint">(set MC_RCON_PASSWORD to enable op/deop)</span>') +
+      '</h3>';
 
     $('detail-body').innerHTML =
       '<div class="detail-section">' +
@@ -544,14 +630,65 @@
           '<div class="mc-motd">' + motdLines + '</div></div>' +
         '</div>' +
       '</div>' +
+      (diagHtml ? '<div class="detail-section">' + diagHtml + '</div>' : '') +
       '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
-      '<div class="detail-section"><h3>Online players</h3>' +
+      '<div class="detail-section">' + playersHeader +
         '<div class="mc-players">' + playersBlock + '</div>' +
       '</div>' +
-      (mc.mod_count > 0 ?
-        '<div class="detail-section"><h3>Mods (' + mc.mod_count + ')</h3>' +
-          '<div class="mods-grid">' + mods + '</div></div>' : '');
+      '<div class="detail-section"><h3>Operators (' + allOps.length + ')</h3>' +
+        '<div class="mc-players">' + opsBlock + '</div>' +
+      '</div>' +
+      '<div class="detail-section"><h3>Mods (' + (mc.mod_count || 0) + ')' +
+        (mc.mod_source && mc.mod_source !== 'none'
+          ? ' <span class="mc-rcon-hint">via ' + esc(mc.mod_source) + '</span>'
+          : ' <span class="mc-rcon-hint">no source — SLP did not advertise mods and MC_DATA_DIR/mods is empty or missing</span>') +
+        '</h3>' +
+        (mc.mod_count > 0 ? '<div class="mods-grid">' + mods + '</div>' : '<div class="empty">no mods detected</div>') +
+      '</div>';
+
+    wireMcOpButtons();
   }
+
+  function wireMcOpButtons() {
+    document.querySelectorAll('.mc-op-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const action = btn.getAttribute('data-action');
+        const player = btn.getAttribute('data-player');
+        if (!confirm((action === 'op' ? 'Make ' : 'Remove operator from ') + player + '?')) return;
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = '…';
+        try {
+          const r = await fetch('/api/minecraft/' + action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player }),
+          });
+          const data = await r.json().catch(() => ({}));
+          if (r.ok && data.ok) {
+            flashBtn(btn, '✓', 'ok', original);
+            // Force a refresh so the button flips state.
+            setTimeout(renderDetail, 800);
+          } else {
+            const msg = data.error || 'failed';
+            flashBtn(btn, msg, 'warn', original);
+            alert(action + ' failed: ' + msg);
+            console.error('mc op action failed', data);
+          }
+        } catch (err) {
+          flashBtn(btn, 'failed', 'warn', original);
+          console.error(err);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  // Track which torrent hashes the user has selected for bulk actions.
+  // Cleared on each detail-view (re)entry so it doesn't leak between sessions.
+  let qbSelected = new Set();
 
   function renderQbDetail(qb) {
     if (!qb.available) {
@@ -571,12 +708,25 @@
       statItem('Session down', fmtBytes(qb.dl_total || 0)) +
       statItem('Session up', fmtBytes(qb.ul_total || 0));
 
+    // Drop selections for hashes that no longer exist (torrent removed upstream)
+    const liveHashes = new Set((qb.torrents || []).map(t => t.hash));
+    qbSelected = new Set([...qbSelected].filter(h => liveHashes.has(h)));
+
     const torrents = (qb.torrents || []).map(t => {
       const stCls = stateClass(t.state);
       const right = t.dl_speed > 0 ? '↓ ' + fmtRate(t.dl_speed) :
                     t.ul_speed > 0 ? '↑ ' + fmtRate(t.ul_speed) : '';
-      return '<div class="tor-item">' +
-        '<div class="tor-name">' + esc(t.name) + '</div>' +
+      const checked = qbSelected.has(t.hash) ? ' checked' : '';
+      return '<div class="tor-item" data-hash="' + esc(t.hash) + '">' +
+        '<div class="tor-row-top">' +
+          '<label class="tor-select"><input type="checkbox" class="qb-select"' + checked +
+            ' data-hash="' + esc(t.hash) + '" aria-label="select torrent"></label>' +
+          '<div class="tor-name">' + esc(t.name) + '</div>' +
+          '<div class="tor-row-actions">' +
+            '<button class="qb-action-btn" data-action="recheck" data-hash="' + esc(t.hash) + '" title="Force recheck this torrent">Recheck</button>' +
+            '<button class="qb-action-btn" data-action="reannounce" data-hash="' + esc(t.hash) + '" title="Reannounce this torrent to trackers">Reannounce</button>' +
+          '</div>' +
+        '</div>' +
         '<div class="tor-meta">' +
           '<span class="tor-state ' + stCls + '">' + esc(t.state) + '</span>' +
           '<span>' + fmtBytes(t.size) + ' · ratio ' + t.ratio + (t.category ? ' · ' + esc(t.category) : '') + '</span>' +
@@ -586,9 +736,92 @@
       '</div>';
     }).join('') || '<div class="empty">no torrents</div>';
 
+    const actionsBar =
+      '<div class="qb-actions-bar">' +
+        '<button class="qb-action-btn" data-action="recheck" data-target="all">Recheck all</button>' +
+        '<button class="qb-action-btn" data-action="reannounce" data-target="all">Reannounce all</button>' +
+        '<button class="qb-action-btn primary" data-action="recheck" data-target="selected">Recheck selected</button>' +
+        '<button class="qb-action-btn primary" data-action="reannounce" data-target="selected">Reannounce selected</button>' +
+        '<span class="qb-selected-count" id="qb-selected-count"></span>' +
+      '</div>';
+
     $('detail-body').innerHTML =
       '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
-      '<div class="detail-section"><h3>Torrents</h3><div class="tor-list">' + torrents + '</div></div>';
+      '<div class="detail-section"><h3>Torrents</h3>' + actionsBar +
+        '<div class="tor-list">' + torrents + '</div></div>';
+
+    updateQbSelectedCount();
+    wireQbActions();
+  }
+
+  function updateQbSelectedCount() {
+    const el = $('qb-selected-count');
+    if (!el) return;
+    el.textContent = qbSelected.size
+      ? qbSelected.size + ' selected'
+      : 'no selection';
+  }
+
+  function wireQbActions() {
+    document.querySelectorAll('.qb-select').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const h = cb.getAttribute('data-hash');
+        if (cb.checked) qbSelected.add(h); else qbSelected.delete(h);
+        updateQbSelectedCount();
+      });
+    });
+    document.querySelectorAll('.qb-action-btn').forEach(btn => {
+      btn.addEventListener('click', () => qbDoAction(btn));
+    });
+  }
+
+  async function qbDoAction(btn) {
+    const action = btn.getAttribute('data-action');
+    const target = btn.getAttribute('data-target');
+    const hash = btn.getAttribute('data-hash');
+    let hashes;
+    if (hash) {
+      hashes = [hash];
+    } else if (target === 'selected') {
+      if (qbSelected.size === 0) {
+        flashBtn(btn, 'No selection', 'warn');
+        return;
+      }
+      hashes = [...qbSelected];
+    } else {
+      hashes = 'all';
+    }
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = '…';
+    try {
+      const r = await fetch('/api/qbittorrent/' + action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hashes }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok && data.ok) {
+        flashBtn(btn, '✓', 'ok', original);
+      } else {
+        flashBtn(btn, 'failed', 'warn', original);
+        console.error('qb action failed', data);
+      }
+    } catch (e) {
+      flashBtn(btn, 'failed', 'warn', original);
+      console.error(e);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function flashBtn(btn, msg, cls, restore) {
+    btn.textContent = msg;
+    btn.classList.add('flash-' + cls);
+    setTimeout(() => {
+      btn.classList.remove('flash-' + cls);
+      if (restore !== undefined) btn.textContent = restore;
+    }, 1200);
   }
 
   function renderSabDetail(sab) {

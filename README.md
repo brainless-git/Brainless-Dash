@@ -121,6 +121,9 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 |----------|---------|-------------|
 | `MC_HOST` | (unset) | Hostname or IP of the Minecraft server. Set this to enable the status card. |
 | `MC_PORT` | `25565` | Minecraft server port. |
+| `MC_DATA_DIR` | (unset) | Path inside the container to the Minecraft server data dir. Mount it read-only to expose the operator list, gamemode, and an on-disk mod count fallback (useful for NeoForge / Fabric where the SLP ping does not advertise mods). |
+| `MC_RCON_PORT` | `25575` | RCON port on the Minecraft server. |
+| `MC_RCON_PASSWORD` | (unset) | RCON password. Set this to enable the Op / Deop buttons in the Minecraft drill-down view. Requires `enable-rcon=true` and a matching `rcon.password` in your `server.properties`. |
 
 ### HTTPS — manual certificates
 
@@ -274,7 +277,25 @@ MC_HOST=192.168.1.100   # or the hostname of your Minecraft server
 MC_PORT=25565           # default Minecraft port
 ```
 
-No changes to the Minecraft server are required. Nothing is written back to the server.
+#### Drill-down extras
+
+Click the Minecraft card to open a detail view with operator status, gamemode, difficulty, and (optionally) one-click op/deop. These extras need access beyond the SLP ping:
+
+- **`MC_DATA_DIR`** (read-only mount of the server data dir): exposes the operator list (`ops.json`), the gamemode and difficulty (`server.properties`), and a fallback mod count from the `mods/` directory (NeoForge and Fabric servers usually do not advertise mods over SLP).
+- **`MC_RCON_PASSWORD`** (and `MC_RCON_PORT` if non-default): enables the Op / Deop buttons next to each connected player. The server must have `enable-rcon=true` and a matching `rcon.password` in `server.properties`. Op/deop are the only commands sent — no chat, no log scraping.
+
+Example:
+
+```yaml
+volumes:
+  - /mnt/user/appdata/minecraft:/mnt/mc:ro
+environment:
+  - MC_DATA_DIR=/mnt/mc
+  - MC_RCON_PORT=25575
+  - MC_RCON_PASSWORD=changeme
+```
+
+Without these extras, the drill-down still works but the operator list and gamemode display as `—` and the op/deop buttons are hidden.
 
 ---
 

@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -89,12 +89,30 @@ def qbittorrent_stats():
     return result
 
 
+@app.post("/api/qbittorrent/{action}")
+def qbittorrent_action(action: str, payload: dict = Body(default={})):
+    if action not in ("recheck", "reannounce"):
+        return JSONResponse({"ok": False, "error": "unknown action"}, status_code=404)
+    hashes = payload.get("hashes", "all")
+    result = stats.qb_action(action, hashes)
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
 @app.get("/api/minecraft")
 def minecraft_stats():
     result = stats.get_minecraft()
     if result is None:
         return JSONResponse({"error": "MC_HOST not configured"}, status_code=404)
     return result
+
+
+@app.post("/api/minecraft/{action}")
+def minecraft_op_action(action: str, payload: dict = Body(default={})):
+    if action not in ("op", "deop"):
+        return JSONResponse({"ok": False, "error": "unknown action"}, status_code=404)
+    player = (payload.get("player") or "").strip()
+    result = stats.mc_op_action(action, player)
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
 # Serve static frontend from root

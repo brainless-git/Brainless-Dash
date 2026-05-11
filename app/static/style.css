@@ -1109,6 +1109,10 @@ body {
 @media (min-width: 1000px) {
   .detail-stats { grid-template-columns: repeat(4, 1fr); }
 }
+@media (min-width: 1400px) {
+  .detail { max-width: 1800px; padding: 20px; }
+  .detail-stats { grid-template-columns: repeat(5, 1fr); }
+}
 
 /* Tablet and up */
 @media (min-width: 700px) {
@@ -1123,14 +1127,16 @@ body {
   .rate-value { font-size: 18px; }
 }
 
-/* Desktop — 3 columns, dense packing fills gaps automatically */
+/* Desktop — 3 columns */
 @media (min-width: 1000px) {
   .content {
     grid-template-columns: repeat(3, 1fr);
     grid-auto-flow: row dense;
   }
-  /* Let system + resources sit in-row; sonarr/plex/minecraft stay full-width */
+  /* System + resources become individual columns; service cards full-width */
   #card-system, #card-resources { grid-column: auto; }
+  /* SABnzbd + qBittorrent each span 2 so they share a row */
+  #card-sabnzbd, #card-qbittorrent { grid-column: span 2; }
   #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
 }
 
@@ -1138,13 +1144,16 @@ body {
 @media (min-width: 1400px) {
   .content {
     grid-template-columns: repeat(4, 1fr);
-    max-width: 1600px;
+    max-width: 1800px;
     gap: 20px;
     padding: 20px;
   }
+  /* System stats cards: each span half the row */
   #card-system, #card-resources,
+  #card-temps,
   #card-storage, #card-network,
   #card-sabnzbd, #card-qbittorrent { grid-column: span 2; }
-  #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
+  /* Service cards: pair up two-per-row instead of stretching full-width */
+  #card-sonarr, #card-plex, #card-minecraft { grid-column: span 2; }
   .rate-value { font-size: 20px; }
 }

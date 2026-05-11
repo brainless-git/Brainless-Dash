@@ -266,14 +266,26 @@ def _fetch_plex():
         progress    = round(view_offset / duration * 100, 1) if duration else 0
         user_el     = item.find("User")
         player_el   = item.find("Player")
+        transcode_el = item.find("TranscodeSession")
         sessions.append({
             "title":       item.get("title", ""),
             "show":        item.get("grandparentTitle") if media_type == "episode" else None,
+            "season":      item.get("parentIndex") if media_type == "episode" else None,
+            "episode":     item.get("index") if media_type == "episode" else None,
+            "year":        item.get("year", ""),
             "type":        media_type,
+            "library":     item.get("librarySectionTitle", ""),
             "user":        user_el.get("title", "unknown") if user_el is not None else "unknown",
             "player":      player_el.get("title", "") if player_el is not None else "",
+            "platform":    player_el.get("platform", "") if player_el is not None else "",
+            "address":     player_el.get("address", "") if player_el is not None else "",
             "state":       player_el.get("state", "") if player_el is not None else "",
-            "transcoding": item.find("TranscodeSession") is not None,
+            "transcoding": transcode_el is not None,
+            "transcode_reason": transcode_el.get("transcodeReason", "") if transcode_el is not None else "",
+            "video_decision": transcode_el.get("videoDecision", "") if transcode_el is not None else "directplay",
+            "audio_decision": transcode_el.get("audioDecision", "") if transcode_el is not None else "directplay",
+            "duration":    duration,
+            "view_offset": view_offset,
             "progress_pct": progress,
         })
     return {"available": True, "stream_count": len(sessions), "sessions": sessions}
@@ -307,7 +319,7 @@ _sonarr_result = None
 
 def _fetch_sonarr():
     today = date.today()
-    end   = today + timedelta(days=5)
+    end   = today + timedelta(days=14)
     url = (
         f"{_SONARR_URL}/api/v3/calendar"
         f"?start={today.isoformat()}&end={end.isoformat()}"
@@ -325,9 +337,9 @@ def _fetch_sonarr():
         today.isoformat(): "Today",
         (today + timedelta(days=1)).isoformat(): "Tomorrow",
     }
-    for i in range(2, 5):
+    for i in range(2, 15):
         d = today + timedelta(days=i)
-        day_labels[d.isoformat()] = d.strftime("%A")
+        day_labels[d.isoformat()] = d.strftime("%A, %d %b")
 
     episodes = []
     for item in items:
@@ -337,13 +349,18 @@ def _fetch_sonarr():
         series = item.get("series") or {}
         show   = series.get("title") or item.get("seriesTitle", "")
         episodes.append({
-            "show":      show,
-            "season":    item.get("seasonNumber"),
-            "episode":   item.get("episodeNumber"),
-            "title":     item.get("title", ""),
-            "air_date":  air_date,
-            "day_label": day_labels.get(air_date, air_date),
+            "show":       show,
+            "network":    series.get("network", ""),
+            "season":     item.get("seasonNumber"),
+            "episode":    item.get("episodeNumber"),
+            "title":      item.get("title", ""),
+            "overview":   item.get("overview", ""),
+            "air_date":   air_date,
+            "air_time":   item.get("airDateUtc", ""),
+            "runtime":    item.get("runtime", 0),
+            "day_label":  day_labels.get(air_date, air_date),
             "downloaded": bool(item.get("hasFile")),
+            "monitored":  bool(item.get("monitored")),
         })
 
     episodes.sort(key=lambda e: (e["air_date"], e["show"]))
@@ -397,14 +414,25 @@ def _fetch_sabnzbd():
         "status":      q.get("status", "Unknown"),
         "speed":       q.get("speed", "0"),       # formatted string e.g. "1.23 MB"
         "size_left":   q.get("sizeleft", "0 B"),  # formatted string
+        "time_left":   q.get("timeleft", ""),     # formatted string e.g. "0:12:34"
+        "mb_left":     q.get("mbleft", "0"),
+        "mb":          q.get("mb", "0"),
         "queue_count": int(q.get("noofslots", 0)),
+        "paused":      bool(q.get("paused", False)),
+        "diskspace1":  q.get("diskspace1", ""),
+        "diskspace2":  q.get("diskspace2", ""),
         "slots": [
             {
                 "filename": s.get("filename", ""),
                 "status":   s.get("status", ""),
                 "percent":  float(s.get("percentage", 0)),
+                "size":     s.get("size", ""),
+                "size_left": s.get("sizeleft", ""),
+                "time_left": s.get("timeleft", ""),
+                "category":  s.get("cat", ""),
+                "priority":  s.get("priority", ""),
             }
-            for s in slots[:5]
+            for s in slots
         ],
     }
 
@@ -501,14 +529,42 @@ def _fetch_qbittorrent():
         return {"available": False, "error": "upstream request failed"}
 
     states = [t.get("state", "") for t in torrents]
+    # Surface the most interesting torrents first: active downloads, then seeding,
+    # then anything else. Cap to keep the payload bounded on busy clients.
+    def _rank(t):
+        st = t.get("state", "")
+        if st in _QB_DL_STATES: return 0
+        if st in _QB_SEED_STATES: return 1
+        return 2
+    sorted_torrents = sorted(torrents, key=lambda t: (_rank(t), -t.get("dlspeed", 0)))
+    torrent_list = [
+        {
+            "name":      t.get("name", ""),
+            "state":     t.get("state", ""),
+            "progress":  round(float(t.get("progress", 0)) * 100, 1),
+            "size":      t.get("size", 0),
+            "downloaded": t.get("downloaded", 0),
+            "dl_speed":  t.get("dlspeed", 0),
+            "ul_speed":  t.get("upspeed", 0),
+            "eta":       t.get("eta", 0),
+            "ratio":     round(float(t.get("ratio", 0)), 2),
+            "category":  t.get("category", ""),
+            "num_seeds": t.get("num_seeds", 0),
+            "num_leechs": t.get("num_leechs", 0),
+        }
+        for t in sorted_torrents[:100]
+    ]
     return {
         "available":   True,
         "dl_speed":    transfer.get("dl_info_speed", 0),
         "ul_speed":    transfer.get("ul_info_speed", 0),
+        "dl_total":    transfer.get("dl_info_data", 0),
+        "ul_total":    transfer.get("up_info_data", 0),
         "downloading": sum(1 for s in states if s in _QB_DL_STATES),
         "seeding":     sum(1 for s in states if s in _QB_SEED_STATES),
         "paused":      sum(1 for s in states if "paused" in s),
         "total":       len(torrents),
+        "torrents":    torrent_list,
     }
 
 
@@ -656,7 +712,7 @@ def _fetch_minecraft():
             raw_mods = forge.get("mods") or forge.get("modList") or []
             if isinstance(raw_mods, list):
                 mod_count = len(raw_mods)
-                for m in raw_mods[:6]:
+                for m in raw_mods:
                     if isinstance(m, dict):
                         name = m.get("modId") or m.get("modid") or ""
                         if name:
@@ -736,6 +792,35 @@ if _ACME_DOMAIN:
 
 # ── Aggregator ─────────────────────────────────────────────────────────────────
 
+def _compact_sabnzbd(sab):
+    if not sab or not sab.get("available"):
+        return sab
+    return {**sab, "slots": sab.get("slots", [])[:5]}
+
+
+def _compact_qb(qb):
+    if not qb or not qb.get("available"):
+        return qb
+    # Dashboard card only needs counters; full torrent list lives at /api/qbittorrent.
+    return {k: v for k, v in qb.items() if k != "torrents"}
+
+
+def _compact_minecraft(mc):
+    if not mc or not mc.get("online"):
+        return mc
+    mods = mc.get("mods") or []
+    return {**mc, "mods": mods[:6]}
+
+
+def _compact_sonarr(sonarr):
+    if not sonarr or not sonarr.get("available"):
+        return sonarr
+    # Dashboard shows the next 5 days; detail page renders the full 14-day window.
+    cutoff = (date.today() + timedelta(days=5)).isoformat()
+    eps = [e for e in sonarr.get("episodes", []) if e.get("air_date", "") < cutoff]
+    return {**sonarr, "episodes": eps}
+
+
 def collect_all():
     result = {
         "timestamp": int(time.time()),
@@ -752,14 +837,14 @@ def collect_all():
         result["plex"] = plex
     sonarr = get_sonarr_calendar()
     if sonarr is not None:
-        result["sonarr"] = sonarr
+        result["sonarr"] = _compact_sonarr(sonarr)
     sabnzbd = get_sabnzbd()
     if sabnzbd is not None:
-        result["sabnzbd"] = sabnzbd
+        result["sabnzbd"] = _compact_sabnzbd(sabnzbd)
     qb = get_qbittorrent()
     if qb is not None:
-        result["qbittorrent"] = qb
+        result["qbittorrent"] = _compact_qb(qb)
     mc = get_minecraft()
     if mc is not None:
-        result["minecraft"] = mc
+        result["minecraft"] = _compact_minecraft(mc)
     return result

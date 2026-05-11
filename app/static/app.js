@@ -44,38 +44,21 @@
   const TEMP_COLORS = ['#e22828', '#4caf50', '#2196f3', '#ff9800', '#9c27b0', '#00bcd4', '#ff5722'];
   const TEMP_HISTORY_MAX = 60;
   const tempHistory = []; // array of {label: temp} maps
-  let tempCanvasW = 0;
 
-  function initCanvas() {
-    const canvas = $('temp-canvas');
-    if (!canvas) return;
-    function sync() {
-      const w = canvas.offsetWidth, h = canvas.offsetHeight;
-      if (w > 0 && w !== tempCanvasW)  { tempCanvasW = w; canvas.width  = w; }
-      if (h > 0 && h !== canvas.height) { canvas.height = h; }
-    }
-    if (window.ResizeObserver) {
-      new ResizeObserver(sync).observe(canvas);
-    } else {
-      window.addEventListener('resize', sync);
-    }
-    sync();
-  }
-
-  function drawTempGraph(sensors) {
-    const canvas = $('temp-canvas');
-    if (!canvas || !canvas.getContext || sensors.length === 0) return;
-
-    // Push snapshot as a label→temp map (O(1) lookup later)
+  function pushTempHistory(sensors) {
     const frame = {};
     sensors.forEach(s => { frame[s.label] = s.current; });
     tempHistory.push(frame);
     if (tempHistory.length > TEMP_HISTORY_MAX) tempHistory.shift();
-    if (tempHistory.length < 2) return;
+  }
+
+  function drawTempGraph(canvas, sensors) {
+    if (!canvas || !canvas.getContext || sensors.length === 0 || tempHistory.length < 2) return;
 
     const ctx = canvas.getContext('2d');
-    const w = tempCanvasW || canvas.width;
+    const w = canvas.width;
     const h = canvas.height;
+    if (!w || !h) return;
     ctx.clearRect(0, 0, w, h);
 
     // Y range across all history
@@ -124,6 +107,75 @@
     });
   }
 
+  // ── Network rate history ─────────────────────────────────────────────────────
+
+  const NET_HISTORY_MAX = 60;
+  const netHistory = []; // array of {recv, sent}
+
+  function pushNetHistory(network) {
+    netHistory.push({ recv: network.rate_recv_bps, sent: network.rate_sent_bps });
+    if (netHistory.length > NET_HISTORY_MAX) netHistory.shift();
+  }
+
+  function drawNetGraph(canvas) {
+    if (!canvas || !canvas.getContext || netHistory.length < 2) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    if (!w || !h) return;
+    ctx.clearRect(0, 0, w, h);
+
+    let maxRate = 0;
+    netHistory.forEach(f => {
+      if (f.recv > maxRate) maxRate = f.recv;
+      if (f.sent > maxRate) maxRate = f.sent;
+    });
+    maxRate = (maxRate * 1.1) || 1024;
+
+    const offset = NET_HISTORY_MAX - netHistory.length;
+    const toX = (fi) => ((offset + fi) / (NET_HISTORY_MAX - 1)) * w;
+    const toY = (v)  => h - 2 - (v / maxRate) * (h - 14);
+
+    // Grid lines
+    ctx.strokeStyle = '#2e2e2e';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#555';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'left';
+    for (let i = 0; i <= 2; i++) {
+      const v = (maxRate * i) / 2;
+      const y = Math.round(toY(v)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.fillText(fmtBytes(v) + '/s', 3, y - 2);
+    }
+
+    const drawLine = (color, key) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      let started = false;
+      netHistory.forEach((f, fi) => {
+        const x = toX(fi), y = toY(f[key]);
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+      });
+      if (started) ctx.stroke();
+    };
+    drawLine('#e22828', 'recv');
+    drawLine('#4caf50', 'sent');
+  }
+
+  function mountCanvas(id, drawFn) {
+    setTimeout(() => {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      canvas.width  = canvas.offsetWidth  || canvas.parentElement?.offsetWidth || 600;
+      canvas.height = canvas.offsetHeight || 180;
+      drawFn(canvas);
+    }, 0);
+  }
+
   // ── Sonarr change detection ──────────────────────────────────────────────────
 
   let _sonarrHash = '';
@@ -166,22 +218,36 @@
 
     // Temperatures
     const temps = d.temps || [];
+    const fans  = d.fans  || [];
+    if (temps.length > 0) pushTempHistory(temps);
+    pushNetHistory(d.network);
+
     if (temps.length === 0) {
       $('temp-count').textContent = '0 sensors';
-      $('temp-legend').innerHTML = '<div class="empty">no sensors detected (mount /sys in container)</div>';
+      $('sensor-list').innerHTML = '<div class="empty">no sensors detected (mount /sys in container)</div>';
     } else {
-      $('temp-count').textContent = temps.length + (temps.length === 1 ? ' sensor' : ' sensors');
-      drawTempGraph(temps);
-      // Build legend as a single innerHTML string — no per-item reflow
-      $('temp-legend').innerHTML = temps.map((s, si) => {
+      const fanLabel = fans.length ? ' · ' + fans.length + (fans.length === 1 ? ' fan' : ' fans') : '';
+      $('temp-count').textContent = temps.length + (temps.length === 1 ? ' sensor' : ' sensors') + fanLabel;
+      const rows = temps.map((s, si) => {
         const color = TEMP_COLORS[si % TEMP_COLORS.length];
         const cls = tempClass(s.current, s.high, s.critical);
-        return '<div class="temp-legend-item">' +
-          '<span class="temp-legend-dot" style="background:' + color + '"></span>' +
-          '<span class="temp-legend-label">' + esc(s.label) + '</span>' +
-          '<span class="temp-legend-value ' + cls + '">' + s.current.toFixed(1) + '°C</span>' +
+        return '<div class="sensor-row">' +
+          '<span class="sensor-row-dot" style="background:' + color + '"></span>' +
+          '<span class="sensor-row-label">' + esc(s.label) + '</span>' +
+          '<span class="sensor-row-value ' + cls + '">' + s.current.toFixed(1) + '°C</span>' +
           '</div>';
-      }).join('');
+      });
+      if (fans.length) {
+        rows.push('<div class="sensor-sep"></div>');
+        fans.forEach(f => {
+          rows.push('<div class="sensor-row">' +
+            '<span class="sensor-row-dot" style="background:var(--border)"></span>' +
+            '<span class="sensor-row-label">' + esc(f.label) + '</span>' +
+            '<span class="sensor-row-value' + (f.rpm === 0 ? ' warn' : '') + '">' + f.rpm.toLocaleString() + ' RPM</span>' +
+            '</div>');
+        });
+      }
+      $('sensor-list').innerHTML = rows.join('');
     }
 
     // Storage
@@ -209,7 +275,7 @@
     // Network
     $('net-down').textContent = fmtRate(d.network.rate_recv_bps);
     $('net-up').textContent   = fmtRate(d.network.rate_sent_bps);
-    const ifaceCount = d.network.interfaces.length;
+    const ifaceCount = (d.network.interfaces || []).length;
     $('net-iface-count').textContent = ifaceCount + (ifaceCount === 1 ? ' interface' : ' interfaces');
 
     // Sonarr — skip DOM rebuild if episodes haven't changed
@@ -445,11 +511,14 @@
   // ── Detail view router ──────────────────────────────────────────────────────
 
   const MODULES = {
-    minecraft:   { title: 'Minecraft',   endpoint: '/api/minecraft',   render: renderMinecraftDetail },
-    qbittorrent: { title: 'qBittorrent', endpoint: '/api/qbittorrent', render: renderQbDetail },
-    sabnzbd:     { title: 'SABnzbd',     endpoint: '/api/sabnzbd',     render: renderSabDetail },
-    sonarr:      { title: 'Sonarr',      endpoint: '/api/sonarr',      render: renderSonarrDetail },
-    plex:        { title: 'Plex',        endpoint: '/api/plex',        render: renderPlexDetail },
+    minecraft:   { title: 'Minecraft',     endpoint: '/api/minecraft',   render: renderMinecraftDetail },
+    qbittorrent: { title: 'qBittorrent',   endpoint: '/api/qbittorrent', render: renderQbDetail },
+    sabnzbd:     { title: 'SABnzbd',       endpoint: '/api/sabnzbd',     render: renderSabDetail },
+    sonarr:      { title: 'Sonarr',        endpoint: '/api/sonarr',      render: renderSonarrDetail },
+    plex:        { title: 'Plex',          endpoint: '/api/plex',        render: renderPlexDetail },
+    temps:       { title: 'Temperatures',  endpoint: '/api/temps',       render: renderTempsDetail },
+    network:     { title: 'Network',       endpoint: '/api/network',     render: renderNetworkDetail },
+    storage:     { title: 'Storage',       endpoint: '/api/storage',     render: renderStorageDetail },
   };
 
   let currentModule = null;
@@ -967,9 +1036,191 @@
     $('detail-body').innerHTML = body;
   }
 
+  // ── System drilldown renderers ───────────────────────────────────────────────
+
+  function renderTempsDetail(data) {
+    const sensors = data.sensors || [];
+    const fans    = data.fans    || [];
+    if (sensors.length > 0) pushTempHistory(sensors);
+
+    const fanLabel = fans.length ? ' · ' + fans.length + (fans.length === 1 ? ' fan' : ' fans') : '';
+    $('detail-meta').textContent = sensors.length + (sensors.length === 1 ? ' sensor' : ' sensors') + fanLabel;
+
+    let body = '';
+
+    if (sensors.length === 0) {
+      body = '<div class="detail-section"><div class="empty">no sensors detected (mount /sys in container)</div></div>';
+      $('detail-body').innerHTML = body;
+      return;
+    }
+
+    // Stats row
+    const hottest = sensors.reduce((a, b) => b.current > a.current ? b : a);
+    const statsHtml =
+      statItem('Sensors', sensors.length) +
+      statItem('Hottest', esc(hottest.label) + ' · ' + hottest.current.toFixed(1) + '°C',
+               tempClass(hottest.current, hottest.high, hottest.critical)) +
+      statItem('Fans', fans.length);
+    body += '<div class="detail-section"><div class="detail-stats">' + statsHtml + '</div></div>';
+
+    // Trend graph
+    body += '<div class="detail-section"><h3>60-second trend</h3>' +
+      '<canvas id="temp-detail-canvas" style="width:100%;height:180px;display:block;margin-bottom:10px"></canvas>' +
+      '<div class="temp-legend">' +
+      sensors.map((s, si) => {
+        const color = TEMP_COLORS[si % TEMP_COLORS.length];
+        const cls = tempClass(s.current, s.high, s.critical);
+        return '<div class="temp-legend-item">' +
+          '<span class="temp-legend-dot" style="background:' + color + '"></span>' +
+          '<span class="temp-legend-label">' + esc(s.label) + '</span>' +
+          '<span class="temp-legend-value ' + cls + '">' + s.current.toFixed(1) + '°C</span>' +
+          '</div>';
+      }).join('') +
+      '</div></div>';
+
+    // Full sensor list
+    body += '<div class="detail-section"><h3>Sensors (' + sensors.length + ')</h3>' +
+      '<div class="sensor-detail-list">' +
+      sensors.map((s, si) => {
+        const color = TEMP_COLORS[si % TEMP_COLORS.length];
+        const cls = tempClass(s.current, s.high, s.critical);
+        const limits = [
+          s.high     ? 'high ' + s.high + '°C'     : '',
+          s.critical ? 'crit ' + s.critical + '°C' : '',
+        ].filter(Boolean).join(' · ');
+        return '<div class="sensor-detail-item">' +
+          '<span class="sensor-detail-dot" style="background:' + color + '"></span>' +
+          '<span class="sensor-detail-chip">' + esc(s.chip) + '</span>' +
+          '<span class="sensor-detail-label">' + esc(s.label) + '</span>' +
+          '<span class="sensor-detail-temp ' + cls + '">' + s.current.toFixed(1) + '°C</span>' +
+          (limits ? '<span class="sensor-detail-limits">' + esc(limits) + '</span>' : '') +
+          '</div>';
+      }).join('') +
+      '</div></div>';
+
+    // Fan list
+    if (fans.length) {
+      body += '<div class="detail-section"><h3>Fans (' + fans.length + ')</h3>' +
+        '<div class="fan-detail-list">' +
+        fans.map(f => {
+          const cls = f.rpm === 0 ? 'warn' : '';
+          return '<div class="fan-detail-item">' +
+            '<span class="fan-detail-chip">' + esc(f.chip) + '</span>' +
+            '<span class="fan-detail-label">' + esc(f.label) + '</span>' +
+            '<span class="fan-detail-rpm ' + cls + '">' + f.rpm.toLocaleString() + ' RPM</span>' +
+            '</div>';
+        }).join('') +
+        '</div></div>';
+    }
+
+    $('detail-body').innerHTML = body;
+    mountCanvas('temp-detail-canvas', (c) => drawTempGraph(c, sensors));
+  }
+
+  function renderNetworkDetail(data) {
+    const ifaces = data.interfaces || [];
+    pushNetHistory(data);
+
+    $('detail-meta').textContent = ifaces.length + (ifaces.length === 1 ? ' interface' : ' interfaces');
+
+    const statsHtml =
+      statItem('↓ Down', fmtRate(data.rate_recv_bps), 'accent') +
+      statItem('↑ Up',   fmtRate(data.rate_sent_bps), 'ok') +
+      statItem('Interfaces', ifaces.length) +
+      (data.total_bytes_recv ? statItem('Total received', fmtBytes(data.total_bytes_recv)) : '') +
+      (data.total_bytes_sent ? statItem('Total sent',     fmtBytes(data.total_bytes_sent)) : '');
+
+    let body = '<div class="detail-section"><div class="detail-stats">' + statsHtml + '</div></div>';
+
+    // Trend graph
+    body += '<div class="detail-section"><h3>60-second rate trend</h3>' +
+      '<canvas id="net-detail-canvas" style="width:100%;height:160px;display:block;margin-bottom:10px"></canvas>' +
+      '<div class="net-graph-legend">' +
+      '<span class="net-legend-item"><span class="net-legend-dot" style="background:#e22828"></span>↓ Down</span>' +
+      '<span class="net-legend-item"><span class="net-legend-dot" style="background:#4caf50"></span>↑ Up</span>' +
+      '</div></div>';
+
+    // Per-interface breakdown
+    if (ifaces.length) {
+      body += '<div class="detail-section"><h3>Interfaces</h3>' +
+        '<div class="iface-list">' +
+        ifaces.map(iface => {
+          return '<div class="iface-item">' +
+            '<div class="iface-head">' +
+              '<span class="iface-name">' + esc(iface.name) + '</span>' +
+              '<span class="iface-rates">' +
+                '↓ ' + fmtRate(iface.rate_recv_bps || 0) +
+                ' &nbsp; ↑ ' + fmtRate(iface.rate_sent_bps || 0) +
+              '</span>' +
+            '</div>' +
+            '<div class="iface-totals">' +
+              'recv ' + fmtBytes(iface.bytes_recv || 0) +
+              ' · sent ' + fmtBytes(iface.bytes_sent || 0) +
+            '</div>' +
+            '</div>';
+        }).join('') +
+        '</div></div>';
+    }
+
+    $('detail-body').innerHTML = body;
+    mountCanvas('net-detail-canvas', drawNetGraph);
+  }
+
+  function renderStorageDetail(data) {
+    const disks = data.disks || [];
+    let totalUsed = 0, totalSize = 0;
+    disks.forEach(d => { totalUsed += d.used; totalSize += d.total; });
+    const overall = totalSize > 0 ? ((totalUsed / totalSize) * 100) : 0;
+
+    $('detail-meta').textContent = disks.length + (disks.length === 1 ? ' mount' : ' mounts');
+
+    const statsHtml =
+      statItem('Used',    fmtBytes(totalUsed),           'accent') +
+      statItem('Free',    fmtBytes(totalSize - totalUsed), 'ok') +
+      statItem('Total',   fmtBytes(totalSize)) +
+      statItem('Overall', overall.toFixed(0) + '%',      barClass(overall));
+
+    let body = '<div class="detail-section"><div class="detail-stats">' + statsHtml + '</div></div>';
+
+    if (disks.length) {
+      body += '<div class="detail-section"><h3>Mounts (' + disks.length + ')</h3>' +
+        '<div class="disk-list">' +
+        disks.map(disk => {
+          return '<div class="disk-item">' +
+            '<div class="disk-head">' +
+              '<span class="disk-name">' + esc(disk.name) + '</span>' +
+              '<div class="disk-head-right">' +
+                (disk.fstype ? '<span class="disk-fstype">' + esc(disk.fstype) + '</span>' : '') +
+                '<span class="disk-stats">' + fmtBytes(disk.used) + ' / ' + fmtBytes(disk.total) +
+                  ' (' + disk.percent.toFixed(0) + '%)</span>' +
+              '</div>' +
+            '</div>' +
+            '<div class="bar"><div class="bar-fill ' + barClass(disk.percent) +
+              '" style="width:' + disk.percent + '%"></div></div>' +
+            '<div class="disk-detail-sub">' +
+              '<span class="disk-mount">' + esc(disk.mount) + '</span>' +
+              '<span class="disk-free">free: ' + fmtBytes(disk.free) + '</span>' +
+            '</div>' +
+            '</div>';
+        }).join('') +
+        '</div></div>';
+    } else {
+      body += '<div class="detail-section"><div class="empty">no mounts found</div></div>';
+    }
+
+    if (data.array_status) {
+      body += '<div class="detail-section"><h3>Array status</h3>' +
+        '<pre class="mdstat-block">' + esc(data.array_status) + '</pre>' +
+        '</div>';
+    }
+
+    $('detail-body').innerHTML = body;
+  }
+
   function attachModuleClicks() {
-    document.querySelectorAll('.module-card').forEach(card => {
+    document.querySelectorAll('[data-module]').forEach(card => {
       const mod = card.getAttribute('data-module');
+      if (!MODULES[mod]) return;
       const go = (e) => { e.preventDefault(); location.hash = '#/' + mod; };
       card.addEventListener('click', go);
       card.addEventListener('keydown', (e) => {
@@ -979,7 +1230,6 @@
   }
 
   async function init() {
-    initCanvas();
     attachModuleClicks();
     window.addEventListener('hashchange', () => {
       applyRoute();

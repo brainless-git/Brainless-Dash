@@ -68,31 +68,39 @@
     </div>
   </section>
 
-  <section class="card" id="card-temps">
+  <section class="card sys-drilldown" id="card-temps" data-module="temps" tabindex="0" role="link">
     <div class="card-head">
       <h2>Temperatures</h2>
-      <span class="meta" id="temp-count">—</span>
+      <div class="card-head-end">
+        <span class="meta" id="temp-count">—</span>
+        <span class="chevron">›</span>
+      </div>
     </div>
-    <canvas id="temp-canvas" height="140"></canvas>
-    <div class="temp-legend" id="temp-legend">
+    <div class="sensor-list" id="sensor-list">
       <div class="empty">Reading sensors…</div>
     </div>
   </section>
 
-  <section class="card" id="card-storage">
+  <section class="card sys-drilldown" id="card-storage" data-module="storage" tabindex="0" role="link">
     <div class="card-head">
       <h2>Storage</h2>
-      <span class="meta" id="storage-summary">,</span>
+      <div class="card-head-end">
+        <span class="meta" id="storage-summary">—</span>
+        <span class="chevron">›</span>
+      </div>
     </div>
     <div class="disk-list" id="disk-list">
-      <div class="empty">Scanning mounts,</div>
+      <div class="empty">Scanning mounts…</div>
     </div>
   </section>
 
-  <section class="card" id="card-network">
+  <section class="card sys-drilldown" id="card-network" data-module="network" tabindex="0" role="link">
     <div class="card-head">
       <h2>Network</h2>
-      <span class="meta" id="net-iface-count"></span>
+      <div class="card-head-end">
+        <span class="meta" id="net-iface-count"></span>
+        <span class="chevron">›</span>
+      </div>
     </div>
     <div class="net-rates">
       <div class="rate">

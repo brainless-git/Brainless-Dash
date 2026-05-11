@@ -44,7 +44,7 @@ def memory_stats():
 
 @app.get("/api/temps")
 def temp_stats():
-    return {"sensors": stats.get_temps()}
+    return {"sensors": stats.get_temps(), "fans": stats.get_fans()}
 
 
 @app.get("/api/storage")

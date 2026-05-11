@@ -107,6 +107,66 @@
     });
   }
 
+  // ── Minecraft player-count history ──────────────────────────────────────────
+
+  function fmtGameTime(seconds) {
+    if (seconds < 60) return '< 1m';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (h === 0) return m + 'm';
+    return m > 0 ? h + 'h ' + m + 'm' : h + 'h';
+  }
+
+  function drawMcGraph(canvas, history, maxPlayers) {
+    if (!canvas || !canvas.getContext || history.length < 2) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    if (!w || !h) return;
+    ctx.clearRect(0, 0, w, h);
+
+    const peak = Math.max(...history, 1);
+    const maxY = Math.max(maxPlayers || 1, peak);
+    const toX = (i) => (i / (history.length - 1)) * w;
+    const toY = (v) => h - 2 - (v / maxY) * (h - 14);
+
+    // Grid lines (one per player slot, max 10)
+    const step = maxY <= 10 ? 1 : Math.ceil(maxY / 10);
+    ctx.strokeStyle = '#2e2e2e';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#555';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'left';
+    for (let v = 0; v <= maxY; v += step) {
+      const y = Math.round(toY(v)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.fillText(v, 3, y - 2);
+    }
+
+    // Time labels
+    ctx.fillStyle = '#444';
+    ctx.textAlign = 'right';
+    const mins = Math.round(history.length * 0.5);
+    ctx.fillText('← ' + (mins >= 60 ? Math.round(mins / 60) + 'h' : mins + 'm') + ' ago', w - 4, h - 2);
+
+    // Player count line with fill
+    ctx.strokeStyle = '#4caf50';
+    ctx.fillStyle = 'rgba(76,175,80,0.12)';
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    history.forEach((count, i) => {
+      const x = toX(i), y = toY(count);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // Fill below
+    ctx.lineTo(toX(history.length - 1), h);
+    ctx.lineTo(toX(0), h);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   // ── Network rate history ─────────────────────────────────────────────────────
 
   const NET_HISTORY_MAX = 60;
@@ -695,6 +755,32 @@
       (rcon ? '' : ' <span class="mc-rcon-hint">(set MC_RCON_PASSWORD to enable op/deop)</span>') +
       '</h3>';
 
+    // Player count history graph
+    const countHistory = mc.player_count_history || [];
+    const graphSection = countHistory.length >= 2
+      ? '<div class="detail-section"><h3>Player count history</h3>' +
+          '<canvas id="mc-count-canvas" style="width:100%;height:140px;display:block;margin-bottom:6px"></canvas>' +
+        '</div>'
+      : '';
+
+    // Leaderboard
+    const leaderboard = mc.player_leaderboard || [];
+    const onlineSet = new Set((mc.players || []).map(p => p.toLowerCase()));
+    const lbRows = leaderboard.map((entry, i) => {
+      const online = onlineSet.has(entry.name.toLowerCase());
+      return '<div class="mc-lb-row">' +
+        '<span class="mc-lb-rank">#' + (i + 1) + '</span>' +
+        '<span class="mc-lb-name">' + esc(entry.name) + '</span>' +
+        (online ? '<span class="mc-lb-online">online</span>' : '') +
+        '<span class="mc-lb-time">' + fmtGameTime(entry.seconds) + '</span>' +
+        '</div>';
+    }).join('');
+    const lbSection = '<div class="detail-section"><h3>Leaderboard · time online</h3>' +
+      (lbRows
+        ? '<div class="mc-leaderboard">' + lbRows + '</div>'
+        : '<div class="empty">no players tracked yet — accumulates while the server is running</div>') +
+      '</div>';
+
     $('detail-body').innerHTML =
       '<div class="detail-section">' +
         '<div class="mc-detail-banner">' + favHtml +
@@ -704,6 +790,8 @@
       '</div>' +
       (diagHtml ? '<div class="detail-section">' + diagHtml + '</div>' : '') +
       '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
+      graphSection +
+      lbSection +
       '<div class="detail-section">' + playersHeader +
         '<div class="mc-players">' + playersBlock + '</div>' +
       '</div>' +
@@ -718,6 +806,9 @@
         (mc.mod_count > 0 ? '<div class="mods-grid">' + mods + '</div>' : '<div class="empty">no mods detected</div>') +
       '</div>';
 
+    if (countHistory.length >= 2) {
+      mountCanvas('mc-count-canvas', (c) => drawMcGraph(c, countHistory, mc.players_max));
+    }
     wireMcOpButtons();
   }
 

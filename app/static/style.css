@@ -999,6 +999,28 @@ body {
 .fan-detail-rpm { font-weight: 600; color: var(--text); }
 .fan-detail-rpm.warn { color: var(--warn); }
 
+/* Detail: Minecraft leaderboard */
+.mc-leaderboard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mc-lb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+}
+.mc-lb-rank { color: var(--text-faint); min-width: 2.2em; text-align: right; flex-shrink: 0; }
+.mc-lb-name { flex: 1; color: var(--text); }
+.mc-lb-online { font-size: 10px; color: var(--ok); padding: 1px 5px; border: 1px solid var(--ok); border-radius: 3px; flex-shrink: 0; }
+.mc-lb-time { font-weight: 600; color: var(--accent); white-space: nowrap; }
+
 /* Detail: network graph legend */
 .net-graph-legend {
   display: flex;

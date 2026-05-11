@@ -711,8 +711,12 @@ if _QB_API_KEY or _QB_PASSWORD:
 
 # ── Minecraft server status ────────────────────────────────────────────────────
 
-_mc_lock   = threading.Lock()
-_mc_result = None
+_mc_lock          = threading.Lock()
+_mc_result        = None
+_mc_player_times: dict = {}   # player_name → accumulated seconds seen online
+_mc_count_history: list = []  # rolling player-count samples (one per poll)
+_MC_POLL_INTERVAL = 30
+_MC_HISTORY_MAX   = 240       # 2 hours at 30 s/sample
 
 
 def _mc_varint(n):
@@ -1060,9 +1064,31 @@ def _mc_worker():
     global _mc_result
     while True:
         result = _fetch_minecraft()
+
+        if result.get("online"):
+            for name in result.get("players", []):
+                _mc_player_times[name] = _mc_player_times.get(name, 0) + _MC_POLL_INTERVAL
+            _mc_count_history.append(result["players_online"])
+        else:
+            _mc_count_history.append(0)
+
+        if len(_mc_count_history) > _MC_HISTORY_MAX:
+            _mc_count_history.pop(0)
+
+        leaderboard = sorted(
+            [{"name": k, "seconds": v} for k, v in _mc_player_times.items()],
+            key=lambda x: x["seconds"],
+            reverse=True,
+        )
+
         with _mc_lock:
-            _mc_result = result
-        time.sleep(30)
+            _mc_result = {
+                **(result or {}),
+                "player_count_history": list(_mc_count_history),
+                "player_leaderboard":   leaderboard,
+            }
+
+        time.sleep(_MC_POLL_INTERVAL)
 
 
 def get_minecraft():

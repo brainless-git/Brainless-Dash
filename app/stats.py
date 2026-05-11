@@ -36,6 +36,9 @@ _ACME_CERTDIR        = "/data/certs"
 
 _MC_HOST          = os.environ.get("MC_HOST",          "")
 _MC_PORT          = int(os.environ.get("MC_PORT",          "25565"))
+_MC_DATA_DIR      = os.environ.get("MC_DATA_DIR",          "")
+_MC_RCON_PORT     = int(os.environ.get("MC_RCON_PORT",     "25575"))
+_MC_RCON_PASSWORD = os.environ.get("MC_RCON_PASSWORD",     "")
 
 
 def _check_service_url(name, url):
@@ -721,6 +724,122 @@ def _mc_read_varint_sock(sock):
             return n
 
 
+def _read_mc_ops():
+    """Return list of {uuid, name, level} from <MC_DATA_DIR>/ops.json, or []."""
+    if not _MC_DATA_DIR:
+        return []
+    path = Path(_MC_DATA_DIR) / "ops.json"
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, list):
+        return []
+    out = []
+    for entry in data:
+        if isinstance(entry, dict) and entry.get("name"):
+            out.append({
+                "uuid": entry.get("uuid", ""),
+                "name": entry["name"],
+                "level": entry.get("level", 4),
+            })
+    return out
+
+
+def _read_mc_properties():
+    """Return {gamemode, hardcore, difficulty, ...} from server.properties, or {}."""
+    if not _MC_DATA_DIR:
+        return {}
+    path = Path(_MC_DATA_DIR) / "server.properties"
+    try:
+        text = path.read_text()
+    except OSError:
+        return {}
+    props = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        props[k.strip()] = v.strip()
+    return {
+        "gamemode":   props.get("gamemode", ""),
+        "hardcore":   props.get("hardcore", "").lower() == "true",
+        "difficulty": props.get("difficulty", ""),
+        "pvp":        props.get("pvp", "").lower() == "true",
+        "max_players": props.get("max-players", ""),
+        "level_name":  props.get("level-name", ""),
+        "motd":        props.get("motd", ""),
+    }
+
+
+def _count_mods_on_disk():
+    """Count *.jar files in <MC_DATA_DIR>/mods/. Returns (count, [names])."""
+    if not _MC_DATA_DIR:
+        return 0, []
+    mods_dir = Path(_MC_DATA_DIR) / "mods"
+    try:
+        jars = sorted(p.name for p in mods_dir.iterdir() if p.suffix == ".jar")
+    except OSError:
+        return 0, []
+    # Strip the version suffix where it's the conventional "name-1.2.3.jar" form.
+    names = [re.sub(r'-[0-9].*\.jar$', '', j) or j for j in jars]
+    return len(jars), names
+
+
+# ── Minecraft RCON ─────────────────────────────────────────────────────────────
+
+_RCON_AUTH = 3
+_RCON_EXEC = 2
+_RCON_RESP = 0
+
+
+def _rcon_send(sock, req_id, ptype, body):
+    payload = struct.pack('<ii', req_id, ptype) + body.encode('utf-8') + b'\x00\x00'
+    sock.sendall(struct.pack('<i', len(payload)) + payload)
+
+
+def _rcon_recv(sock):
+    raw_len = _mc_recv_all(sock, 4)
+    (length,) = struct.unpack('<i', raw_len)
+    if length < 10 or length > 4096:
+        raise ValueError("invalid rcon length")
+    data = _mc_recv_all(sock, length)
+    req_id, ptype = struct.unpack('<ii', data[:8])
+    body = data[8:-2].decode('utf-8', errors='replace')
+    return req_id, ptype, body
+
+
+def mc_rcon(command):
+    """Run a single RCON command. Returns {"ok": bool, "response": str, "error": str|None}."""
+    if not _MC_HOST or not _MC_RCON_PASSWORD:
+        return {"ok": False, "response": "", "error": "rcon not configured"}
+    try:
+        with socket.create_connection((_MC_HOST, _MC_RCON_PORT), timeout=5) as s:
+            _rcon_send(s, 1, _RCON_AUTH, _MC_RCON_PASSWORD)
+            req_id, ptype, _ = _rcon_recv(s)
+            if req_id == -1:
+                return {"ok": False, "response": "", "error": "auth failed"}
+            _rcon_send(s, 2, _RCON_EXEC, command)
+            _, _, body = _rcon_recv(s)
+            return {"ok": True, "response": body, "error": None}
+    except Exception as exc:
+        log.warning("RCON command failed: %s", exc)
+        return {"ok": False, "response": "", "error": "rcon request failed"}
+
+
+_MC_PLAYER_NAME_RE = re.compile(r'^[A-Za-z0-9_]{1,16}$')
+
+
+def mc_op_action(action, player):
+    """Run /op <player> or /deop <player>. action must be 'op' or 'deop'."""
+    if action not in ("op", "deop"):
+        return {"ok": False, "error": "unknown action"}
+    if not _MC_PLAYER_NAME_RE.match(player or ""):
+        return {"ok": False, "error": "invalid player name"}
+    return mc_rcon(f"{action} {player}")
+
+
 def _fetch_minecraft():
     try:
         with socket.create_connection((_MC_HOST, _MC_PORT), timeout=3) as s:
@@ -769,18 +888,33 @@ def _fetch_minecraft():
 
     mod_names = []
     mod_count = 0
+    mod_source = "none"
     for key in ("forgeData", "modinfo"):
         forge = status.get(key)
         if isinstance(forge, dict):
             raw_mods = forge.get("mods") or forge.get("modList") or []
-            if isinstance(raw_mods, list):
+            if isinstance(raw_mods, list) and raw_mods:
                 mod_count = len(raw_mods)
                 for m in raw_mods:
                     if isinstance(m, dict):
-                        name = m.get("modId") or m.get("modid") or ""
+                        name = m.get("modId") or m.get("modid") or m.get("name") or ""
                         if name:
                             mod_names.append(name)
+                mod_source = "slp:" + key
                 break
+
+    # NeoForge / Forge 1.18+ often advertise nothing usable in the SLP ping.
+    # Fall back to the on-disk mods/ directory if MC_DATA_DIR is mounted.
+    if mod_count == 0:
+        disk_count, disk_names = _count_mods_on_disk()
+        if disk_count:
+            mod_count = disk_count
+            mod_names = disk_names
+            mod_source = "disk"
+
+    ops        = _read_mc_ops()
+    properties = _read_mc_properties()
+    op_names   = {o["name"].lower() for o in ops}
 
     return {
         "online":          True,
@@ -790,11 +924,20 @@ def _fetch_minecraft():
         "players_online":  online_n,
         "players_max":     players.get("max", 0),
         "players":         names,
+        "ops":             ops,
+        "online_op_names": [n for n in names if n.lower() in op_names],
         "hidden_players":  hidden,
         "latency_ms":      latency_ms,
         "favicon":         favicon,
         "mod_count":       mod_count,
         "mods":            mod_names,
+        "mod_source":      mod_source,
+        "gamemode":        properties.get("gamemode", ""),
+        "hardcore":        properties.get("hardcore", False),
+        "difficulty":      properties.get("difficulty", ""),
+        "pvp":             properties.get("pvp", False),
+        "level_name":      properties.get("level_name", ""),
+        "rcon_available":  bool(_MC_RCON_PASSWORD),
         "enforces_secure_chat": bool(status.get("enforcesSecureChat")),
     }
 
@@ -872,7 +1015,9 @@ def _compact_minecraft(mc):
     if not mc or not mc.get("online"):
         return mc
     mods = mc.get("mods") or []
-    return {**mc, "mods": mods[:6]}
+    # Detail page renders the full ops list and mod list; the dashboard card
+    # shouldn't ship them on every 2-second poll.
+    return {**mc, "mods": mods[:6], "ops": []}
 
 
 def _compact_sonarr(sonarr):

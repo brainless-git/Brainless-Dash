@@ -787,6 +787,29 @@ body {
   letter-spacing: 0;
   margin-left: 6px;
 }
+.mc-diag {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-dim);
+}
+.mc-diag.warn {
+  border-color: var(--warn);
+  background: rgba(255,179,0,0.08);
+  color: var(--text);
+}
+.mc-diag strong { color: var(--text); }
+.mc-diag code {
+  background: var(--bg-card);
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-size: 10px;
+  color: var(--accent);
+}
 
 /* Detail: minecraft */
 .mc-detail-banner {

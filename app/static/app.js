@@ -589,6 +589,36 @@
     const mods = (mc.mods || []).map(m => '<div class="mod-chip">' + esc(m) + '</div>').join('') ||
       '<span class="empty">no mods</span>';
 
+    // Build a diagnostic block explaining why ops/mods/gamemode might be
+    // empty. Visible whenever MC_DATA_DIR is misconfigured or empty.
+    const diag = mc.data_dir_diag || {};
+    let diagHtml = '';
+    if (!diag.configured) {
+      diagHtml = '<div class="mc-diag warn">' +
+        '<strong>MC_DATA_DIR is not set.</strong> Without it, the mod count, ' +
+        'operator list, and gamemode cannot be read. ' +
+        'In the Unraid template, MC_DATA_DIR must be an <em>environment variable</em> ' +
+        '(text input), not a Path mount. Set it to a directory inside the container ' +
+        '(typically under <code>/mnt/...</code>, which is already mounted read-only).' +
+        '</div>';
+    } else if (!diag.exists) {
+      diagHtml = '<div class="mc-diag warn">' +
+        '<strong>MC_DATA_DIR is set to <code>' + esc(diag.path) + '</code> but does not exist inside the container.</strong> ' +
+        'The path must be reachable from inside the container (the dashboard mounts the host\'s <code>/mnt</code> read-only).' +
+        '</div>';
+    } else if (!diag.readable) {
+      diagHtml = '<div class="mc-diag warn">' +
+        '<strong>MC_DATA_DIR exists but is not readable.</strong> ' +
+        'The dashboard runs as UID 1001 — make sure the directory is world-readable.' +
+        '</div>';
+    } else if (!diag.has_mods_dir && !diag.has_ops_json && !diag.has_properties) {
+      diagHtml = '<div class="mc-diag warn">' +
+        '<strong>MC_DATA_DIR is readable but contains no <code>mods/</code>, ' +
+        '<code>ops.json</code>, or <code>server.properties</code>.</strong> ' +
+        'Check the path (<code>' + esc(diag.path) + '</code>) really points at the Minecraft server\'s data dir.' +
+        '</div>';
+    }
+
     const playersHeader = '<h3>Online players' +
       (rcon ? '' : ' <span class="mc-rcon-hint">(set MC_RCON_PASSWORD to enable op/deop)</span>') +
       '</h3>';
@@ -600,6 +630,7 @@
           '<div class="mc-motd">' + motdLines + '</div></div>' +
         '</div>' +
       '</div>' +
+      (diagHtml ? '<div class="detail-section">' + diagHtml + '</div>' : '') +
       '<div class="detail-section"><div class="detail-stats">' + stats + '</div></div>' +
       '<div class="detail-section">' + playersHeader +
         '<div class="mc-players">' + playersBlock + '</div>' +
@@ -607,10 +638,13 @@
       '<div class="detail-section"><h3>Operators (' + allOps.length + ')</h3>' +
         '<div class="mc-players">' + opsBlock + '</div>' +
       '</div>' +
-      (mc.mod_count > 0 ?
-        '<div class="detail-section"><h3>Mods (' + mc.mod_count + ')' +
-          (mc.mod_source ? ' <span class="mc-rcon-hint">via ' + esc(mc.mod_source) + '</span>' : '') +
-          '</h3><div class="mods-grid">' + mods + '</div></div>' : '');
+      '<div class="detail-section"><h3>Mods (' + (mc.mod_count || 0) + ')' +
+        (mc.mod_source && mc.mod_source !== 'none'
+          ? ' <span class="mc-rcon-hint">via ' + esc(mc.mod_source) + '</span>'
+          : ' <span class="mc-rcon-hint">no source — SLP did not advertise mods and MC_DATA_DIR/mods is empty or missing</span>') +
+        '</h3>' +
+        (mc.mod_count > 0 ? '<div class="mods-grid">' + mods + '</div>' : '<div class="empty">no mods detected</div>') +
+      '</div>';
 
     wireMcOpButtons();
   }
@@ -637,7 +671,9 @@
             // Force a refresh so the button flips state.
             setTimeout(renderDetail, 800);
           } else {
-            flashBtn(btn, 'failed', 'warn', original);
+            const msg = data.error || 'failed';
+            flashBtn(btn, msg, 'warn', original);
+            alert(action + ' failed: ' + msg);
             console.error('mc op action failed', data);
           }
         } catch (err) {

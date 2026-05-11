@@ -13,7 +13,7 @@
   <Category>Tools: Status: Network:Management</Category>
   <WebUI>http://[IP]:[PORT:8090]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/brainless-git/brainless-dash/main/brainless-dash.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/brainless-git/brainless-dash/main/assets/icon.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/brainless-git/brainless-dash/main/assets/icon.png</Icon>
   <ExtraParams></ExtraParams>
   <PostArgs/>
   <CPUset/>

@@ -74,6 +74,13 @@ _CPU_PACKAGE_PRIORITY = [
     "cpu temperature", "cpu",
 ]
 
+# Motherboard superio / embedded controller chip name prefixes.
+# Only these + CPU chips are shown in the temperature view.
+_MOBO_CHIP_PREFIXES = (
+    "nct", "it8", "w83", "f718", "smsc", "gpio_fan",
+    "asus_wmi", "asusec", "nuvoton",
+)
+
 # ── Network rate state ─────────────────────────────────────────────────────────
 _net_cache = {"time": None, "bytes_sent": 0, "bytes_recv": 0}
 _net_iface_prev = {}  # name → (bytes_sent, bytes_recv)
@@ -129,7 +136,7 @@ def _best_cpu_temp(entries):
 
 
 def get_temps():
-    """CPU chips collapsed to one representative reading; all others listed."""
+    """CPU chips collapsed to one representative reading; motherboard chips listed."""
     sensors = []
     try:
         temps = psutil.sensors_temperatures()
@@ -138,7 +145,8 @@ def get_temps():
 
     cpu_entry = None
     for chip, entries in temps.items():
-        if chip.lower() in _CPU_CHIPS:
+        chip_lower = chip.lower()
+        if chip_lower in _CPU_CHIPS:
             if cpu_entry is None:
                 best = _best_cpu_temp(entries)
                 if best is not None:
@@ -147,7 +155,7 @@ def get_temps():
                         "current": round(best.current, 1),
                         "high": best.high, "critical": best.critical,
                     }
-        else:
+        elif chip_lower.startswith(_MOBO_CHIP_PREFIXES):
             for entry in entries:
                 if entry.current is None:
                     continue
@@ -163,7 +171,7 @@ def get_temps():
 
 
 def get_fans():
-    """Return fan speed readings from all hardware monitoring chips."""
+    """Return fan speed readings for fans with RPM > 0."""
     fans = []
     try:
         fan_data = psutil.sensors_fans()
@@ -171,7 +179,7 @@ def get_fans():
         return fans
     for chip, entries in (fan_data or {}).items():
         for entry in entries:
-            if entry.current is None:
+            if entry.current is None or entry.current <= 0:
                 continue
             fans.append({
                 "chip":  chip,

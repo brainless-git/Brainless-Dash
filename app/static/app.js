@@ -243,7 +243,7 @@
           rows.push('<div class="sensor-row">' +
             '<span class="sensor-row-dot" style="background:var(--border)"></span>' +
             '<span class="sensor-row-label">' + esc(f.label) + '</span>' +
-            '<span class="sensor-row-value' + (f.rpm === 0 ? ' warn' : '') + '">' + f.rpm.toLocaleString() + ' RPM</span>' +
+            '<span class="sensor-row-value">' + f.rpm.toLocaleString() + ' RPM</span>' +
             '</div>');
         });
       }
@@ -532,6 +532,7 @@
     const mod = MODULES[currentModule];
     if (!mod) return;
     $('detail-title').textContent = mod.title;
+    const savedScroll = window.scrollY;
     try {
       const r = await fetch(mod.endpoint, { cache: 'no-store' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -542,6 +543,8 @@
       $('detail-body').innerHTML = '<div class="empty">failed to load: ' + esc(e.message) + '</div>';
       $('detail-meta').textContent = '';
     }
+    // Restore scroll position after DOM rebuild to prevent mobile jump/glitch
+    if (savedScroll > 0) window.scrollTo(0, savedScroll);
   }
 
   function showDetail() {
@@ -1103,11 +1106,9 @@
       body += '<div class="detail-section"><h3>Fans (' + fans.length + ')</h3>' +
         '<div class="fan-detail-list">' +
         fans.map(f => {
-          const cls = f.rpm === 0 ? 'warn' : '';
           return '<div class="fan-detail-item">' +
-            '<span class="fan-detail-chip">' + esc(f.chip) + '</span>' +
             '<span class="fan-detail-label">' + esc(f.label) + '</span>' +
-            '<span class="fan-detail-rpm ' + cls + '">' + f.rpm.toLocaleString() + ' RPM</span>' +
+            '<span class="fan-detail-rpm">' + f.rpm.toLocaleString() + ' RPM</span>' +
             '</div>';
         }).join('') +
         '</div></div>';

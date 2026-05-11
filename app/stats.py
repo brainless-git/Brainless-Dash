@@ -539,6 +539,7 @@ def _fetch_qbittorrent():
     sorted_torrents = sorted(torrents, key=lambda t: (_rank(t), -t.get("dlspeed", 0)))
     torrent_list = [
         {
+            "hash":      t.get("hash", ""),
             "name":      t.get("name", ""),
             "state":     t.get("state", ""),
             "progress":  round(float(t.get("progress", 0)) * 100, 1),
@@ -566,6 +567,68 @@ def _fetch_qbittorrent():
         "total":       len(torrents),
         "torrents":    torrent_list,
     }
+
+
+_QB_ACTIONS = {
+    "recheck":    "/api/v2/torrents/recheck",
+    "reannounce": "/api/v2/torrents/reannounce",
+}
+
+
+def qb_action(action, hashes):
+    """Trigger a qBittorrent action on one or more torrents.
+
+    hashes may be the string "all" or an iterable of hash strings. Returns
+    {"ok": bool, "error": str|None}.
+    """
+    if not _QB_API_KEY and not _QB_PASSWORD:
+        return {"ok": False, "error": "qbittorrent not configured"}
+    path = _QB_ACTIONS.get(action)
+    if not path:
+        return {"ok": False, "error": "unknown action"}
+
+    if isinstance(hashes, str):
+        if hashes != "all":
+            return {"ok": False, "error": "invalid hashes value"}
+        payload = "all"
+    else:
+        cleaned = [h for h in hashes if isinstance(h, str) and re.fullmatch(r"[0-9a-fA-F]{40}", h)]
+        if not cleaned:
+            return {"ok": False, "error": "no valid hashes provided"}
+        payload = "|".join(cleaned)
+
+    global _qb_sid
+    if not _QB_API_KEY and not _qb_sid and not _qb_login():
+        return {"ok": False, "error": "authentication failed"}
+
+    def _post():
+        data = urllib.parse.urlencode({"hashes": payload}).encode()
+        req = urllib.request.Request(
+            f"{_QB_URL}{path}", data=data, method="POST",
+            headers={**_qb_headers(), "Content-Type": "application/x-www-form-urlencoded"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status
+
+    try:
+        _post()
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403) and not _QB_API_KEY:
+            _qb_sid = ""
+            if not _qb_login():
+                return {"ok": False, "error": "authentication failed"}
+            try:
+                _post()
+            except Exception as exc2:
+                log.warning("qBittorrent %s failed after re-auth: %s", action, exc2)
+                return {"ok": False, "error": "upstream request failed"}
+        else:
+            log.warning("qBittorrent %s failed: %s", action, exc)
+            return {"ok": False, "error": "upstream request failed"}
+    except Exception as exc:
+        log.warning("qBittorrent %s failed: %s", action, exc)
+        return {"ok": False, "error": "upstream request failed"}
+    return {"ok": True, "error": None}
 
 
 def _qb_worker():

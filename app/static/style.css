@@ -636,6 +636,81 @@ body {
 .tor-state.up { color: var(--ok); }
 .tor-state.pause { color: var(--text-dim); }
 
+/* qBittorrent action buttons */
+.qb-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+.qb-action-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.qb-action-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.qb-action-btn:disabled { opacity: 0.5; cursor: wait; }
+.qb-action-btn.primary {
+  background: linear-gradient(180deg, #3a1212, #2a0c0c);
+  border-color: var(--accent);
+  color: var(--accent-glow);
+}
+.qb-action-btn.primary:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+.qb-action-btn.flash-ok { background: var(--ok); color: #fff; border-color: var(--ok); }
+.qb-action-btn.flash-warn { background: var(--warn); color: #1c1c1c; border-color: var(--warn); }
+.qb-selected-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-left: auto;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tor-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.tor-row-top .tor-name {
+  flex: 1;
+  margin-bottom: 0;
+  min-width: 0;
+}
+.tor-select {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tor-select input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.tor-row-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 /* Detail: minecraft */
 .mc-detail-banner {
   display: flex;

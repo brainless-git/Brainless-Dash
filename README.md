@@ -30,12 +30,18 @@ A lightweight, mobile-first web dashboard for monitoring an Unraid server. Runs 
 - Dark Unraid-themed UI, runs as non-root, no privileged mode required
 
 **Optional integrations**
-- [Plex](#plex) — active streams, user, player, and progress
-- [Sonarr](#sonarr) — upcoming episodes for the next 5 days
-- [SABnzbd](#sabnzbd) — active downloads, speed, and queue
-- [qBittorrent](#qbittorrent) — download/upload speeds and torrent counts
-- [Minecraft](#minecraft) — server status, favicon, MOTD, latency, version, online players, and Forge mod list
+- [Plex](#plex) — active streams, user, player, transcode vs direct play, progress
+- [Sonarr](#sonarr) — upcoming episodes for the next 5 days (14 in drill-down)
+- [SABnzbd](#sabnzbd) — active downloads, speed, queue (full slot list in drill-down)
+- [qBittorrent](#qbittorrent) — download/upload speeds, torrent counts, and one-click recheck / reannounce
+- [Minecraft](#minecraft) — server status, favicon, MOTD, version, latency, player and op lists, gamemode, mods, and one-click op/deop
 - [HTTPS / Let's Encrypt](#https--lets-encrypt) — automatic TLS with DNS challenge (Cloudflare, DigitalOcean, DuckDNS) or manual cert files
+
+**Drill-down detail pages**
+
+Click any of the five integration cards (Plex, Sonarr, SABnzbd, qBittorrent, Minecraft) to open a dedicated page with more detail than the dashboard card can fit. Use the back button on the page (or the browser back button) to return to the dashboard. The hash-based router has no dependencies and works on mobile.
+
+The drill-down is also where the few mutating actions live — qBittorrent recheck / reannounce and Minecraft op / deop — so the always-on dashboard stays purely informational.
 
 ## Stack
 
@@ -161,7 +167,9 @@ The `/data/certs` mount is only needed if you use ACME or manual cert files.
 
 ### Plex
 
-The Plex card shows all active streams — title, user, player, direct play vs transcode, and playback progress.
+**Dashboard card** — all active streams: title, user, player, direct play vs transcode, and playback progress.
+
+**Drill-down** — per-session detail including library, platform, season/episode number for TV, transcode reason (video / audio decision), paused state, and aggregate counts (direct play vs transcoding).
 
 **Getting your Plex token**
 
@@ -194,7 +202,9 @@ PLEX_TOKEN=xxxxxxxxxxxxxxxxxxxx
 
 ### Sonarr
 
-The Sonarr card shows episodes airing in the next 5 days with their season/episode number and a downloaded badge.
+**Dashboard card** — episodes airing in the next 5 days with their season/episode number and a downloaded badge.
+
+**Drill-down** — the next 14 days, grouped by day, with episode summaries, the show network, and counts of downloaded vs upcoming episodes.
 
 **Getting your Sonarr API key**
 
@@ -213,7 +223,9 @@ SONARR_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ### SABnzbd
 
-The SABnzbd card shows download speed, remaining queue size, and a progress bar for each active download slot (up to 5).
+**Dashboard card** — download speed, remaining queue size, and a progress bar for each active download slot (up to 5).
+
+**Drill-down** — the full queue with per-slot status, category, ETA, and progress, plus aggregate stats (status, speed, time left, free disk on incomplete and complete dirs).
 
 **Getting your SABnzbd API key**
 
@@ -233,7 +245,14 @@ SABNZBD_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ### qBittorrent
 
-The qBittorrent card shows download and upload speeds plus counts of downloading, seeding, and paused torrents.
+**Dashboard card** — download and upload speeds plus counts of downloading, seeding, and paused torrents.
+
+**Drill-down** — full list of active torrents (top 100 by activity) with state, size, ratio, ETA, and a progress bar each. Two actions per torrent:
+
+- **Recheck** — forces qBittorrent to re-verify the files on disk (`POST /api/v2/torrents/recheck`). Useful after restoring from backup or when seeding stops unexpectedly.
+- **Reannounce** — re-announces the torrent to its trackers (`POST /api/v2/torrents/reannounce`). Useful when seed count drops to zero.
+
+Both actions are also available in bulk — `Recheck all` / `Reannounce all`, or tick the per-row checkboxes and use `Recheck selected` / `Reannounce selected`. Hashes are validated as 40-character hex before being forwarded.
 
 **Option A: API key (qBittorrent 5.0+, recommended)**
 
@@ -261,41 +280,46 @@ QB_PASSWORD=yourpassword
 
 ### Minecraft
 
-Read-only Server List Ping (SLP). The card shows:
+**Dashboard card** (read-only Server List Ping):
 
-- online/offline status with a coloured dot
+- online / offline status
 - server favicon (the 64x64 PNG the server advertises)
 - MOTD, including multi-line MOTDs (colour codes are stripped)
 - version name and protocol number
 - live latency in ms (measured via the SLP ping/pong round trip)
 - player count, sample player names, plus a `+N hidden` chip when the server hides full names
-- Forge or NeoForge mod count and a sample of mod IDs (when the server publishes `forgeData` / `modinfo`)
-- a `secure` chip when the server enforces secure chat
+- gamemode chip (survival / creative / adventure / hardcore — needs `MC_DATA_DIR`)
+- mod count for Forge servers that advertise `forgeData` / `modinfo`, with an on-disk fallback for NeoForge / Fabric
 
 ```
 MC_HOST=192.168.1.100   # or the hostname of your Minecraft server
 MC_PORT=25565           # default Minecraft port
 ```
 
-#### Drill-down extras
+**Drill-down**
 
-Click the Minecraft card to open a detail view with operator status, gamemode, difficulty, and (optionally) one-click op/deop. These extras need access beyond the SLP ping:
-
-- **`MC_DATA_DIR`** (read-only mount of the server data dir): exposes the operator list (`ops.json`), the gamemode and difficulty (`server.properties`), and a fallback mod count from the `mods/` directory (NeoForge and Fabric servers usually do not advertise mods over SLP).
-- **`MC_RCON_PASSWORD`** (and `MC_RCON_PORT` if non-default): enables the Op / Deop buttons next to each connected player. The server must have `enable-rcon=true` and a matching `rcon.password` in `server.properties`. Op/deop are the only commands sent — no chat, no log scraping.
-
-Example:
+Click the Minecraft card to open a detail view showing gamemode, difficulty, PvP, the full operator list (with online status indicators), and the full mod list. Each connected player who is also a server operator gets an `OP` badge.
 
 ```yaml
-volumes:
-  - /mnt/user/appdata/minecraft:/mnt/mc:ro
 environment:
-  - MC_DATA_DIR=/mnt/mc
-  - MC_RCON_PORT=25575
+  - MC_HOST=192.168.1.100
+  - MC_PORT=25565
+  - MC_DATA_DIR=/mnt/user/appdata/minecraft   # see notes below
+  - MC_RCON_PORT=25575                        # default
   - MC_RCON_PASSWORD=changeme
 ```
 
-Without these extras, the drill-down still works but the operator list and gamemode display as `—` and the op/deop buttons are hidden.
+`MC_DATA_DIR` enables reading the server's data directory:
+
+- `ops.json` → operator list and per-player `OP` badges
+- `server.properties` → gamemode, difficulty, PvP flag
+- `mods/` → fallback mod count when SLP does not advertise mods (NeoForge / Fabric)
+
+This is **not** a separate volume mount. The dashboard container already has `/mnt` mounted read-only, so set `MC_DATA_DIR` to whatever path the Minecraft server's data lives at on the Unraid host (the directory that contains `ops.json`, `server.properties`, and `mods/` directly). In the Unraid template editor, add it as a **Variable** (text input), **not** a Path — if the field shows a folder icon, the value is going to a host-path mount and the env var inside the container will stay empty.
+
+`MC_RCON_PASSWORD` enables one-click **Op** / **Deop** buttons next to each connected player. The server must have `enable-rcon=true` and a matching `rcon.password` in `server.properties`. Op and deop are the only commands sent — no chat, no log scraping. Player names are validated against `[A-Za-z0-9_]{1,16}` before being forwarded.
+
+Without `MC_DATA_DIR` or `MC_RCON_PASSWORD`, the drill-down still works but the operator list and gamemode show as empty and the op/deop buttons are hidden. The drill-down also surfaces a yellow diagnostic banner explaining exactly which check is failing if `MC_DATA_DIR` is set but unreadable.
 
 ---
 
@@ -447,19 +471,23 @@ Edit `docker-compose.yml` to set your credentials before running.
 |----------|--------|-------------|
 | `/api/health` | GET | Liveness check — returns `{"status":"ok"}` |
 | `/api/config` | GET | Frontend runtime config (refresh interval) |
-| `/api/stats` | GET | Full payload: all metrics and enabled integrations |
+| `/api/stats` | GET | Compact payload for the dashboard: all metrics and a trimmed projection of each enabled integration |
 | `/api/cpu` | GET | CPU metrics only |
 | `/api/memory` | GET | Memory and swap only |
 | `/api/temps` | GET | Temperature sensors only |
 | `/api/storage` | GET | Storage mounts and array status |
 | `/api/network` | GET | Network counters and current rates |
-| `/api/plex` | GET | Plex sessions (404 if not configured) |
-| `/api/sonarr` | GET | Sonarr calendar (404 if not configured) |
-| `/api/sabnzbd` | GET | SABnzbd queue (404 if not configured) |
-| `/api/qbittorrent` | GET | qBittorrent stats (404 if not configured) |
-| `/api/minecraft` | GET | Minecraft server status (404 if not configured) |
+| `/api/plex` | GET | Plex sessions, full payload (404 if not configured) |
+| `/api/sonarr` | GET | Sonarr calendar, 14-day window (404 if not configured) |
+| `/api/sabnzbd` | GET | SABnzbd queue, full slot list (404 if not configured) |
+| `/api/qbittorrent` | GET | qBittorrent stats and torrent list (404 if not configured) |
+| `/api/qbittorrent/recheck` | POST | Force recheck — body `{"hashes": "all"\|["<40-hex>", ...]}` |
+| `/api/qbittorrent/reannounce` | POST | Reannounce to trackers — same body shape |
+| `/api/minecraft` | GET | Minecraft server status, operators, gamemode, mods (404 if not configured) |
+| `/api/minecraft/op` | POST | Run `/op <player>` via RCON — body `{"player": "<name>"}` |
+| `/api/minecraft/deop` | POST | Run `/deop <player>` via RCON — body `{"player": "<name>"}` |
 
-All responses are JSON.
+All responses are JSON. The dashboard polls `/api/stats` (compact), while each drill-down page polls the matching per-integration endpoint to render the richer view.
 
 ---
 
@@ -484,7 +512,7 @@ Open `http://localhost:8090`. Temperature sensors and Unraid mounts will not be 
 - **Plex on macvlan/br0** — the Unraid host cannot reach containers using macvlan networking by their container IP. Switch Plex to host networking and use `localhost`, or use a bridge network.
 - **Minecraft player names** — some servers hide the player sample list even when players are online. In that case the count is shown but names are not.
 - **Let's Encrypt rate limits** — the `/data/certs` volume must be mounted persistently. If certs are lost and re-requested too frequently, Let's Encrypt will temporarily block issuance. The stored certbot configuration is also what drives automatic renewal, so without the volume mount, renewals will not work.
-- This is a read-only monitoring tool. It cannot start, stop, or modify anything on the host.
+- **Scope of mutating actions** — the dashboard is read-only with respect to the Unraid host (`/sys`, `/proc`, `/mnt` are all mounted `ro`). Two narrow exceptions exist for upstream services: qBittorrent recheck / reannounce and Minecraft op / deop. Both are opt-in (require credentials), happen only on explicit button clicks in the drill-down, and use a fixed action whitelist — there is no general command surface.
 
 ## License
 

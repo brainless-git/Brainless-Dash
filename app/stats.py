@@ -773,6 +773,39 @@ def _read_mc_properties():
     }
 
 
+def _mc_data_dir_diag():
+    """Inspect MC_DATA_DIR. Returned in /api/minecraft so users can see why
+    the ops list or mod count are empty."""
+    diag = {
+        "configured":   bool(_MC_DATA_DIR),
+        "path":         _MC_DATA_DIR,
+        "exists":       False,
+        "readable":     False,
+        "has_mods_dir": False,
+        "has_ops_json": False,
+        "has_properties": False,
+    }
+    if not _MC_DATA_DIR:
+        return diag
+    p = Path(_MC_DATA_DIR)
+    try:
+        diag["exists"] = p.is_dir()
+    except OSError:
+        return diag
+    if not diag["exists"]:
+        return diag
+    try:
+        # Touch the dir to verify read permission
+        next(p.iterdir(), None)
+        diag["readable"] = True
+    except (OSError, StopIteration):
+        diag["readable"] = False
+    diag["has_mods_dir"]   = (p / "mods").is_dir()
+    diag["has_ops_json"]   = (p / "ops.json").is_file()
+    diag["has_properties"] = (p / "server.properties").is_file()
+    return diag
+
+
 def _count_mods_on_disk():
     """Count *.jar files in <MC_DATA_DIR>/mods/. Returns (count, [names])."""
     if not _MC_DATA_DIR:
@@ -812,17 +845,39 @@ def _rcon_recv(sock):
 
 def mc_rcon(command):
     """Run a single RCON command. Returns {"ok": bool, "response": str, "error": str|None}."""
-    if not _MC_HOST or not _MC_RCON_PASSWORD:
-        return {"ok": False, "response": "", "error": "rcon not configured"}
+    if not _MC_HOST:
+        return {"ok": False, "response": "", "error": "MC_HOST not set"}
+    if not _MC_RCON_PASSWORD:
+        return {"ok": False, "response": "", "error": "MC_RCON_PASSWORD not set"}
     try:
         with socket.create_connection((_MC_HOST, _MC_RCON_PORT), timeout=5) as s:
+            s.settimeout(5)
             _rcon_send(s, 1, _RCON_AUTH, _MC_RCON_PASSWORD)
-            req_id, ptype, _ = _rcon_recv(s)
-            if req_id == -1:
-                return {"ok": False, "response": "", "error": "auth failed"}
+            # The Source RCON spec allows the server to emit an empty
+            # SERVERDATA_RESPONSE_VALUE before the SERVERDATA_AUTH_RESPONSE.
+            # Loop until we see the auth response (or the request id of -1).
+            auth_ok = False
+            for _ in range(2):
+                req_id, ptype, _body = _rcon_recv(s)
+                if req_id == -1:
+                    return {"ok": False, "response": "", "error": "auth failed (wrong password?)"}
+                if ptype == _RCON_EXEC:        # AUTH_RESPONSE uses the same value as EXEC (2)
+                    auth_ok = True
+                    break
+            if not auth_ok:
+                return {"ok": False, "response": "", "error": "auth handshake failed"}
             _rcon_send(s, 2, _RCON_EXEC, command)
             _, _, body = _rcon_recv(s)
             return {"ok": True, "response": body, "error": None}
+    except socket.timeout:
+        log.warning("RCON timed out connecting to %s:%s", _MC_HOST, _MC_RCON_PORT)
+        return {"ok": False, "response": "", "error": f"timed out ({_MC_HOST}:{_MC_RCON_PORT})"}
+    except ConnectionRefusedError:
+        return {"ok": False, "response": "",
+                "error": f"connection refused on {_MC_HOST}:{_MC_RCON_PORT} (enable-rcon=true?)"}
+    except OSError as exc:
+        log.warning("RCON network error: %s", exc)
+        return {"ok": False, "response": "", "error": f"network error: {exc}"}
     except Exception as exc:
         log.warning("RCON command failed: %s", exc)
         return {"ok": False, "response": "", "error": "rcon request failed"}
@@ -915,6 +970,7 @@ def _fetch_minecraft():
     ops        = _read_mc_ops()
     properties = _read_mc_properties()
     op_names   = {o["name"].lower() for o in ops}
+    data_dir_diag = _mc_data_dir_diag()
 
     return {
         "online":          True,
@@ -938,6 +994,9 @@ def _fetch_minecraft():
         "pvp":             properties.get("pvp", False),
         "level_name":      properties.get("level_name", ""),
         "rcon_available":  bool(_MC_RCON_PASSWORD),
+        "rcon_host":       _MC_HOST,
+        "rcon_port":       _MC_RCON_PORT,
+        "data_dir_diag":   data_dir_diag,
         "enforces_secure_chat": bool(status.get("enforcesSecureChat")),
     }
 
@@ -1017,7 +1076,7 @@ def _compact_minecraft(mc):
     mods = mc.get("mods") or []
     # Detail page renders the full ops list and mod list; the dashboard card
     # shouldn't ship them on every 2-second poll.
-    return {**mc, "mods": mods[:6], "ops": []}
+    return {**mc, "mods": mods[:6], "ops": [], "data_dir_diag": None}
 
 
 def _compact_sonarr(sonarr):

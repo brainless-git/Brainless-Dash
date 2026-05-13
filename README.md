@@ -279,7 +279,14 @@ MC_PORT=25565           # default Minecraft port
 
 #### Drill-down extras
 
-Click the Minecraft card to open a detail view with operator status, gamemode, difficulty, and (optionally) one-click op/deop. These extras need access beyond the SLP ping:
+Click the Minecraft card to open a detail view with:
+
+- a rolling 2-hour player count graph (area chart, one sample every 30 seconds)
+- a game-time leaderboard sorted by total time online, with an "online" badge for currently connected players
+- operator status, gamemode, and difficulty
+- one-click op/deop buttons (when RCON is configured)
+
+The graph and leaderboard are maintained in memory while the container runs; they reset on restart. The operator list, gamemode, and op/deop buttons need access beyond the SLP ping:
 
 - **`MC_DATA_DIR`** (read-only mount of the server data dir): exposes the operator list (`ops.json`), the gamemode and difficulty (`server.properties`), and a fallback mod count from the `mods/` directory (NeoForge and Fabric servers usually do not advertise mods over SLP).
 - **`MC_RCON_PASSWORD`** (and `MC_RCON_PORT` if non-default): enables the Op / Deop buttons next to each connected player. The server must have `enable-rcon=true` and a matching `rcon.password` in `server.properties`. Op/deop are the only commands sent — no chat, no log scraping.

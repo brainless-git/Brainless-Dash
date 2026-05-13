@@ -1,0 +1,20 @@
+services:
+  unraid-mcp:
+    build: .
+    container_name: unraid-mcp
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      # Docker socket — required for container management tools
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Appdata directory — read-write so config files can be edited.
+      # Adjust the host path if your appdata lives elsewhere.
+      - /mnt/user/appdata:/host/mnt/user/appdata
+    environment:
+      # Set this to a strong random string. Pass the same value as the
+      # X-Api-Key header in your Claude Code MCP settings.
+      - MCP_API_KEY=change-me
+      # Comma-separated list of paths the file tools may access (container-side paths).
+      - ALLOWED_PATHS=/host/mnt/user/appdata
+      - PORT=8765

@@ -108,36 +108,42 @@ if [ -n "$TAILSCALE_AUTHKEY" ]; then
     mkdir -p "$TS_STATE" /var/run/tailscale
     chown monitor:monitor "$TS_STATE"
 
-    echo "[tailscale] Starting tailscaled (userspace networking)..."
-    tailscaled \
-        --tun=userspace-networking \
-        --statefile="$TS_STATE/tailscaled.state" \
-        --socket=/var/run/tailscale/tailscaled.sock \
-        > /tmp/tailscaled.log 2>&1 &
-
-    # Wait for the socket to appear (up to 10 s).
-    for i in $(seq 1 20); do
-        [ -S /var/run/tailscale/tailscaled.sock ] && break
-        sleep 0.5
-    done
-
-    if [ ! -S /var/run/tailscale/tailscaled.sock ]; then
-        echo "[tailscale] WARNING: tailscaled did not start — skipping Tailscale setup."
+    if ! command -v tailscaled >/dev/null 2>&1; then
+        echo "[tailscale] ERROR: tailscaled binary not found — image may not include Tailscale binaries."
     else
-        echo "[tailscale] Connecting to tailnet as '${TAILSCALE_HOSTNAME:-brainless-dash}'..."
-        if tailscale up \
-               --authkey="$TAILSCALE_AUTHKEY" \
-               --hostname="${TAILSCALE_HOSTNAME:-brainless-dash}" \
-               --accept-dns=false \
-               --accept-routes=false; then
-            echo "[tailscale] Connected. Configuring serve on port ${PORT:-8090}..."
-            if tailscale serve http://localhost:"${PORT:-8090}"; then
-                echo "[tailscale] Serve configured. Dashboard accessible via Tailscale HTTPS."
-            else
-                echo "[tailscale] WARNING: tailscale serve failed — check that MagicDNS and HTTPS are enabled in your Tailscale admin console."
-            fi
+        echo "[tailscale] Starting tailscaled (userspace networking)..."
+        tailscaled \
+            --tun=userspace-networking \
+            --state="$TS_STATE/tailscaled.state" \
+            --socket=/var/run/tailscale/tailscaled.sock \
+            > /tmp/tailscaled.log 2>&1 &
+
+        # Wait for the socket to appear (up to 15 s).
+        for i in $(seq 1 30); do
+            [ -S /var/run/tailscale/tailscaled.sock ] && break
+            sleep 0.5
+        done
+
+        if [ ! -S /var/run/tailscale/tailscaled.sock ]; then
+            echo "[tailscale] WARNING: tailscaled did not start — skipping Tailscale setup."
+            echo "[tailscale] tailscaled log:"
+            cat /tmp/tailscaled.log 2>/dev/null || true
         else
-            echo "[tailscale] WARNING: tailscale up failed — check TAILSCALE_AUTHKEY."
+            echo "[tailscale] Connecting to tailnet as '${TAILSCALE_HOSTNAME:-brainless-dash}'..."
+            if tailscale up \
+                   --authkey="$TAILSCALE_AUTHKEY" \
+                   --hostname="${TAILSCALE_HOSTNAME:-brainless-dash}" \
+                   --accept-dns=false \
+                   --accept-routes=false; then
+                echo "[tailscale] Connected. Configuring serve on port ${PORT:-8090}..."
+                if tailscale serve http://localhost:"${PORT:-8090}"; then
+                    echo "[tailscale] Serve configured. Dashboard accessible via Tailscale HTTPS."
+                else
+                    echo "[tailscale] WARNING: tailscale serve failed — check that MagicDNS and HTTPS are enabled in your Tailscale admin console."
+                fi
+            else
+                echo "[tailscale] WARNING: tailscale up failed — check TAILSCALE_AUTHKEY."
+            fi
         fi
     fi
 fi

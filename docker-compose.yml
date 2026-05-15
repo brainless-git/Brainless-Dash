@@ -70,3 +70,7 @@ services:
       - TAILSCALE_AUTHKEY=
       - TAILSCALE_HOSTNAME=brainless-dash
       - TAILSCALE_STATE_DIR=/data/tailscale
+      # TAILSCALE_SERVE_PORT: HTTPS port Tailscale serves on (default 443).
+      # If your host already serves something on the Tailscale IP:443, change this
+      # to e.g. 8443 and access via https://<hostname>.ts.net:8443/
+      - TAILSCALE_SERVE_PORT=443

@@ -135,12 +135,30 @@ if [ -n "$TAILSCALE_AUTHKEY" ]; then
                    --hostname="${TAILSCALE_HOSTNAME:-brainless-dash}" \
                    --accept-dns=false \
                    --accept-routes=false; then
-                echo "[tailscale] Connected. Configuring serve on port ${PORT:-8090}..."
-                if tailscale serve http://localhost:"${PORT:-8090}"; then
-                    echo "[tailscale] Serve configured. Dashboard accessible via Tailscale HTTPS."
-                else
-                    echo "[tailscale] WARNING: tailscale serve failed — check that MagicDNS and HTTPS are enabled in your Tailscale admin console."
+
+                TS_SERVE_PORT="${TAILSCALE_SERVE_PORT:-443}"
+                echo "[tailscale] Configuring serve: HTTPS port ${TS_SERVE_PORT} → http://localhost:${PORT:-8090}..."
+                # Run in background: older Tailscale versions treat 'serve' as a
+                # long-running foreground process; newer versions return immediately.
+                # Backgrounding works correctly in both cases.
+                tailscale serve --https="${TS_SERVE_PORT}" \
+                    http://localhost:"${PORT:-8090}" \
+                    > /tmp/tailscale-serve.log 2>&1 &
+                sleep 2  # give it a moment to register the config
+
+                # Log the exact URL so there is no ambiguity about which node to connect to.
+                TS_DNS=$(tailscale status --json 2>/dev/null \
+                    | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("Self",{}).get("DNSName","").rstrip("."))' \
+                    2>/dev/null || true)
+                TS_IP=$(tailscale ip --4 2>/dev/null || true)
+                if [ -n "$TS_DNS" ]; then
+                    if [ "$TS_SERVE_PORT" = "443" ]; then
+                        echo "[tailscale] Dashboard: https://${TS_DNS}/"
+                    else
+                        echo "[tailscale] Dashboard: https://${TS_DNS}:${TS_SERVE_PORT}/"
+                    fi
                 fi
+                [ -n "$TS_IP" ] && echo "[tailscale] Tailscale IP: ${TS_IP}"
             else
                 echo "[tailscale] WARNING: tailscale up failed — check TAILSCALE_AUTHKEY."
             fi

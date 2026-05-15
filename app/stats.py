@@ -40,6 +40,8 @@ _MC_DATA_DIR      = os.environ.get("MC_DATA_DIR",          "")
 _MC_RCON_PORT     = int(os.environ.get("MC_RCON_PORT",     "25575"))
 _MC_RCON_PASSWORD = os.environ.get("MC_RCON_PASSWORD",     "")
 
+_TAILSCALE_SOCKET = os.environ.get("TAILSCALE_SOCKET", "/var/run/tailscale/tailscaled.sock")
+
 
 def _check_service_url(name, url):
     """Warn at startup if a service URL has an unexpected scheme."""
@@ -1102,6 +1104,106 @@ if _MC_HOST:
     threading.Thread(target=_mc_worker, daemon=True, name="mc-poller").start()
 
 
+# ── Tailscale (background-polled, non-blocking) ────────────────────────────────
+
+_ts_lock   = threading.Lock()
+_ts_result = None
+
+
+def _fetch_tailscale():
+    if not os.path.exists(_TAILSCALE_SOCKET):
+        return None
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(3)
+        try:
+            s.connect(_TAILSCALE_SOCKET)
+            s.sendall(
+                b"GET /localapi/v0/status HTTP/1.1\r\n"
+                b"Host: local-tailscaled.sock\r\n"
+                b"Connection: close\r\n\r\n"
+            )
+            buf = bytearray()
+            while True:
+                chunk = s.recv(32768)
+                if not chunk:
+                    break
+                buf += chunk
+        finally:
+            s.close()
+    except OSError as exc:
+        log.debug("Tailscale socket error: %s", exc)
+        return {"available": False, "error": "socket unreachable"}
+
+    sep = bytes(buf).find(b"\r\n\r\n")
+    if sep < 0:
+        return {"available": False, "error": "malformed response"}
+
+    try:
+        data = json.loads(buf[sep + 4:])
+    except Exception:
+        return {"available": False, "error": "JSON parse error"}
+
+    state = data.get("BackendState", "")
+
+    self_node = data.get("Self") or {}
+    self_ips = self_node.get("TailscaleIPs") or []
+    tailscale_ip = self_ips[0] if self_ips else ""
+    dns_name = self_node.get("DNSName", "").rstrip(".")
+    hostname = self_node.get("HostName", "")
+
+    peers_raw = data.get("Peer") or {}
+    peers = []
+    for peer in peers_raw.values():
+        peer_ips = peer.get("TailscaleIPs") or []
+        peers.append({
+            "hostname":     peer.get("HostName", ""),
+            "dns_name":     peer.get("DNSName", "").rstrip("."),
+            "tailscale_ip": peer_ips[0] if peer_ips else "",
+            "online":       bool(peer.get("Online")),
+            "os":           peer.get("OS", ""),
+            "last_seen":    peer.get("LastSeen", ""),
+        })
+    peers.sort(key=lambda p: (not p["online"], p["hostname"].lower()))
+    peers_online = sum(1 for p in peers if p["online"])
+
+    ct = data.get("CurrentTailnet") or {}
+    tailnet = ct.get("Name", "") if isinstance(ct, dict) else ""
+    magic_dns_suffix = data.get("MagicDNSSuffix", "")
+    if not magic_dns_suffix and isinstance(ct, dict):
+        magic_dns_suffix = ct.get("MagicDNSSuffix", "")
+
+    return {
+        "available":       True,
+        "state":           state,
+        "hostname":        hostname,
+        "dns_name":        dns_name,
+        "tailscale_ip":    tailscale_ip,
+        "tailnet":         tailnet,
+        "magic_dns_suffix": magic_dns_suffix,
+        "peers_online":    peers_online,
+        "peers_total":     len(peers),
+        "peers":           peers,
+    }
+
+
+def _ts_worker():
+    global _ts_result
+    while True:
+        result = _fetch_tailscale()
+        with _ts_lock:
+            _ts_result = result
+        time.sleep(30)
+
+
+def get_tailscale():
+    with _ts_lock:
+        return _ts_result
+
+
+threading.Thread(target=_ts_worker, daemon=True, name="tailscale-poller").start()
+
+
 # ── ACME auto-renewal ──────────────────────────────────────────────────────────
 
 def _acme_renewal_worker():
@@ -1151,6 +1253,12 @@ def _compact_qb(qb):
     return {k: v for k, v in qb.items() if k != "torrents"}
 
 
+def _compact_tailscale(ts):
+    if not ts or not ts.get("available"):
+        return ts
+    return {k: v for k, v in ts.items() if k != "peers"}
+
+
 def _compact_minecraft(mc):
     if not mc or not mc.get("online"):
         return mc
@@ -1196,4 +1304,7 @@ def collect_all():
     mc = get_minecraft()
     if mc is not None:
         result["minecraft"] = _compact_minecraft(mc)
+    ts = get_tailscale()
+    if ts is not None:
+        result["tailscale"] = _compact_tailscale(ts)
     return result

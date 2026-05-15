@@ -1,3 +1,5 @@
+FROM tailscale/tailscale:stable AS tailscale-src
+
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -25,6 +27,10 @@ RUN pip install \
     certbot-dns-cloudflare \
     certbot-dns-digitalocean \
     certbot-dns-duckdns
+
+# Tailscale binaries for optional embedded connectivity.
+COPY --from=tailscale-src /usr/local/bin/tailscale  /usr/local/bin/tailscale
+COPY --from=tailscale-src /usr/local/bin/tailscaled /usr/local/bin/tailscaled
 
 COPY app ./app
 COPY entrypoint.sh /entrypoint.sh
@@ -55,14 +61,18 @@ ENV PORT=8090 \
     ACME_EMAIL= \
     ACME_DNS_PLUGIN= \
     ACME_DNS_CREDENTIALS= \
-    ACME_CHALLENGE_PORT=8180
+    ACME_CHALLENGE_PORT=8180 \
+    TAILSCALE_SOCKET=/var/run/tailscale/tailscaled.sock \
+    TAILSCALE_AUTHKEY= \
+    TAILSCALE_HOSTNAME=brainless-dash \
+    TAILSCALE_STATE_DIR=/data/tailscale
 
 # Entrypoint runs as root so it can write to host-mounted volumes (e.g. /data/certs),
 # then drops to monitor (UID 1001) via gosu before exec'ing uvicorn.
 RUN useradd -r -u 1001 monitor \
     && chown -R monitor:monitor /srv \
     && chmod +x /entrypoint.sh \
-    && mkdir -p /data/certs
+    && mkdir -p /data/certs /data/tailscale /var/run/tailscale
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "\

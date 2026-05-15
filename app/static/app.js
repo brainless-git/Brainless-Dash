@@ -546,6 +546,29 @@
       qbCard.style.display = 'none';
     }
 
+    // Tailscale
+    const tsCard = $('card-tailscale');
+    if (d.tailscale) {
+      tsCard.style.display = '';
+      const ts = d.tailscale;
+      if (!ts.available) {
+        $('ts-dot').className = 'dot dot-off';
+        $('ts-state').textContent = ts.error ? 'error: ' + ts.error : 'unavailable';
+        $('ts-ip').textContent = '';
+        $('ts-dns').textContent = '';
+        $('ts-peers').textContent = '';
+      } else {
+        const running = ts.state === 'Running';
+        $('ts-dot').className = 'dot ' + (running ? 'dot-on' : 'dot-off');
+        $('ts-state').textContent = ts.state || '—';
+        $('ts-ip').textContent = ts.tailscale_ip || '';
+        $('ts-dns').textContent = ts.dns_name || '';
+        $('ts-peers').textContent = ts.peers_online + ' / ' + ts.peers_total + ' peers online';
+      }
+    } else {
+      tsCard.style.display = 'none';
+    }
+
     // Footer
     $('last-update').textContent = new Date().toLocaleTimeString();
     $('refresh-rate').textContent = (REFRESH_MS / 1000) + 's';
@@ -568,6 +591,63 @@
     }
   }
 
+  function fmtLastSeen(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    const secs = Math.floor((Date.now() - d) / 1000);
+    if (secs < 60) return secs + 's ago';
+    if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+    if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
+    return Math.floor(secs / 86400) + 'd ago';
+  }
+
+  function renderTailscaleDetail(ts) {
+    if (!ts.available) {
+      $('detail-meta').textContent = 'unavailable';
+      $('detail-body').innerHTML = '<div class="detail-section"><div class="empty">' +
+        esc(ts.error || 'tailscale unavailable') + '</div></div>';
+      return;
+    }
+
+    const running = ts.state === 'Running';
+    $('detail-meta').textContent = ts.state + ' · ' + ts.peers_online + '/' + ts.peers_total + ' peers online';
+
+    const statsHtml =
+      statItem('State', esc(ts.state || '—'), running ? 'ok' : 'warn') +
+      statItem('IP', esc(ts.tailscale_ip || '—'), 'accent') +
+      (ts.dns_name    ? statItem('DNS name', esc(ts.dns_name)) : '') +
+      statItem('Peers online', ts.peers_online, ts.peers_online > 0 ? 'ok' : '') +
+      statItem('Peers total',  ts.peers_total) +
+      (ts.tailnet     ? statItem('Tailnet', esc(ts.tailnet)) : '') +
+      (ts.magic_dns_suffix ? statItem('MagicDNS', esc(ts.magic_dns_suffix)) : '');
+
+    let body = '<div class="detail-section"><div class="detail-stats">' + statsHtml + '</div></div>';
+
+    const peers = ts.peers || [];
+    if (peers.length) {
+      const peerItems = peers.map(p => {
+        const dotCls = p.online ? 'dot-on' : 'dot-off';
+        const lastSeen = p.last_seen && !p.online
+          ? '<span class="mc-latency">' + esc(fmtLastSeen(p.last_seen)) + '</span>'
+          : '';
+        return '<div class="ts-peer-item">' +
+          '<span class="dot ' + dotCls + '" style="flex-shrink:0"></span>' +
+          '<span class="ts-peer-hostname">' + esc(p.hostname || p.dns_name || '—') + '</span>' +
+          '<span class="ts-peer-ip">' + esc(p.tailscale_ip || '') + '</span>' +
+          (p.os ? '<span class="ts-peer-os">' + esc(p.os) + '</span>' : '') +
+          lastSeen +
+          '</div>';
+      }).join('');
+      body += '<div class="detail-section"><h3>Peers (' + peers.length + ')</h3>' +
+        '<div class="ts-peer-list">' + peerItems + '</div></div>';
+    } else {
+      body += '<div class="detail-section"><div class="empty">no peers</div></div>';
+    }
+
+    $('detail-body').innerHTML = body;
+  }
+
   // ── Detail view router ──────────────────────────────────────────────────────
 
   const MODULES = {
@@ -576,6 +656,7 @@
     sabnzbd:     { title: 'SABnzbd',       endpoint: '/api/sabnzbd',     render: renderSabDetail },
     sonarr:      { title: 'Sonarr',        endpoint: '/api/sonarr',      render: renderSonarrDetail },
     plex:        { title: 'Plex',          endpoint: '/api/plex',        render: renderPlexDetail },
+    tailscale:   { title: 'Tailscale',     endpoint: '/api/tailscale',   render: renderTailscaleDetail },
     temps:       { title: 'Temperatures',  endpoint: '/api/temps',       render: renderTempsDetail },
     network:     { title: 'Network',       endpoint: '/api/network',     render: renderNetworkDetail },
     storage:     { title: 'Storage',       endpoint: '/api/storage',     render: renderStorageDetail },

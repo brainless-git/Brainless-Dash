@@ -35,6 +35,7 @@ A lightweight, mobile-first web dashboard for monitoring an Unraid server. Runs 
 - [SABnzbd](#sabnzbd) — active downloads, speed, and queue
 - [qBittorrent](#qbittorrent) — download/upload speeds and torrent counts
 - [Minecraft](#minecraft) — server status, favicon, MOTD, latency, version, online players, and Forge mod list
+- [Tailscale](#tailscale) — VPN state, Tailscale IP, MagicDNS hostname, and peer list
 - [HTTPS / Let's Encrypt](#https--lets-encrypt) — automatic TLS with DNS challenge (Cloudflare, DigitalOcean, DuckDNS) or manual cert files
 
 ## Stack
@@ -125,6 +126,15 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `MC_RCON_PORT` | `25575` | RCON port on the Minecraft server. |
 | `MC_RCON_PASSWORD` | (unset) | RCON password. Set this to enable the Op / Deop buttons in the Minecraft drill-down view. Requires `enable-rcon=true` and a matching `rcon.password` in your `server.properties`. |
 
+### Tailscale
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TAILSCALE_SOCKET` | `/var/run/tailscale/tailscaled.sock` | Path inside the container to a Tailscale daemon socket. The status card appears automatically when the socket is reachable (works for both host-mounted and embedded Tailscale). |
+| `TAILSCALE_AUTHKEY` | (unset) | Tailscale auth key (pre-auth key or OAuth client secret). Set to enable embedded Tailscale — the container joins the tailnet as its own node and publishes the dashboard via `tailscale serve`. |
+| `TAILSCALE_HOSTNAME` | `brainless-dash` | Tailscale node name shown in the admin console and used in the MagicDNS hostname (`<hostname>.<tailnet>.ts.net`). |
+| `TAILSCALE_STATE_DIR` | `/data/tailscale` | Container path where embedded Tailscale persists its state. Mount a persistent volume here so the node reconnects on restart without consuming a new auth key. |
+
 ### HTTPS — manual certificates
 
 | Variable | Default | Description |
@@ -152,6 +162,8 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `/proc` | `/proc` | ro | CPU, memory, network counters, load averages |
 | `/mnt` | `/mnt` | ro | Unraid array disks, cache pools for capacity reporting |
 | `/data/certs` | e.g. `/mnt/user/appdata/brainless-dash/certs` | rw | ACME certificate storage (required for Let's Encrypt) |
+| `/var/run/tailscale/tailscaled.sock` | `/var/run/tailscale/tailscaled.sock` | ro | Tailscale host socket (optional, enables the Tailscale status card without embedded Tailscale) |
+| `/data/tailscale` | e.g. `/mnt/user/appdata/brainless-dash/tailscale` | rw | Embedded Tailscale state (required when `TAILSCALE_AUTHKEY` is set, so the node reconnects without re-auth on restart) |
 
 The `/data/certs` mount is only needed if you use ACME or manual cert files.
 
@@ -303,6 +315,59 @@ environment:
 ```
 
 Without these extras, the drill-down still works but the operator list and gamemode display as `—` and the op/deop buttons are hidden.
+
+---
+
+### Tailscale
+
+The Tailscale card shows VPN state, Tailscale IP, MagicDNS hostname, and peer count. The detail view lists all peers with online status, IP, OS, and last-seen time.
+
+There are 2 ways to use Tailscale with Brainless-Dash:
+
+---
+
+#### Option A: Host socket (read-only status card)
+
+If Tailscale is already running on the Unraid host, mount the `tailscaled` socket read-only. The card appears automatically — no auth key needed.
+
+```yaml
+volumes:
+  - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock:ro
+```
+
+---
+
+#### Option B: Embedded Tailscale (publish the dashboard over Tailscale)
+
+The container runs its own `tailscaled` daemon, joins your tailnet, and publishes the dashboard via `tailscale serve`. The dashboard becomes accessible at `https://<hostname>.<tailnet>.ts.net` with a valid TLS certificate — no port forwarding, no manual cert management.
+
+**Prerequisites**
+
+- MagicDNS and HTTPS certificates enabled in the [Tailscale admin console](https://login.tailscale.com/admin/dns)
+- A pre-auth key or OAuth client credential from the [Tailscale admin console](https://login.tailscale.com/admin/settings/keys)
+
+OAuth keys are recommended for containers — they do not expire and can create new nodes automatically.
+
+**Configuration**
+
+```yaml
+volumes:
+  # Persistent state: node reconnects without re-auth on container restart.
+  - /mnt/user/appdata/brainless-dash/tailscale:/data/tailscale
+environment:
+  - TAILSCALE_AUTHKEY=tskey-auth-xxxxxxxxxxxxxxxx
+  - TAILSCALE_HOSTNAME=brainless-dash   # shows as hostname.tailXXXX.ts.net
+```
+
+**What happens at startup**
+
+1. `tailscaled` starts in [userspace networking](https://tailscale.com/kb/1112/userspace-networking) mode — no privileged mode or `/dev/net/tun` needed.
+2. `tailscale up` authenticates (or reconnects if state is present).
+3. `tailscale serve` configures HTTPS proxying from the tailnet to the local dashboard port.
+
+The dashboard remains accessible on the LAN as well (`http://<unraid-ip>:<PORT>`). Both access paths work simultaneously.
+
+> **Note:** If you also set `ACME_DOMAIN` or `HTTPS_CERT`, those apply to the LAN-facing HTTPS endpoint. The Tailscale HTTPS endpoint is managed independently by Tailscale.
 
 ---
 
@@ -465,6 +530,7 @@ Edit `docker-compose.yml` to set your credentials before running.
 | `/api/sabnzbd` | GET | SABnzbd queue (404 if not configured) |
 | `/api/qbittorrent` | GET | qBittorrent stats (404 if not configured) |
 | `/api/minecraft` | GET | Minecraft server status (404 if not configured) |
+| `/api/tailscale` | GET | Tailscale status (404 if socket not available) |
 
 All responses are JSON.
 

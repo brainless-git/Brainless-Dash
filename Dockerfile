@@ -66,7 +66,7 @@ ENV PORT=8090 \
     TAILSCALE_AUTHKEY= \
     TAILSCALE_HOSTNAME=brainless-dash \
     TAILSCALE_STATE_DIR=/data/tailscale \
-    TAILSCALE_SERVE_PORT=443
+    TAILSCALE_SERVE_PORT=8443
 
 # Entrypoint runs as root so it can write to host-mounted volumes (e.g. /data/certs),
 # then drops to monitor (UID 1001) via gosu before exec'ing uvicorn.

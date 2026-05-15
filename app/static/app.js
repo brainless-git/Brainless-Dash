@@ -560,7 +560,7 @@
       } else {
         const running = ts.state === 'Running';
         $('ts-dot').className = 'dot ' + (running ? 'dot-on' : 'dot-off');
-        $('ts-state').textContent = ts.state || '—';
+        $('ts-state').textContent = tsStateLabel(ts.state);
         $('ts-ip').textContent = ts.tailscale_ip || '';
         $('ts-dns').textContent = ts.dns_name || '';
         $('ts-peers').textContent = ts.peers_online + ' / ' + ts.peers_total + ' peers online';
@@ -591,6 +591,16 @@
     }
   }
 
+  const TS_STATE_LABELS = {
+    Running:          'connected',
+    NeedsLogin:       'needs login',
+    NeedsMachineAuth: 'needs machine auth',
+    Stopped:          'stopped',
+    Starting:         'starting',
+    NoState:          'not configured',
+  };
+  function tsStateLabel(state) { return TS_STATE_LABELS[state] || state || '—'; }
+
   function fmtLastSeen(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -611,10 +621,10 @@
     }
 
     const running = ts.state === 'Running';
-    $('detail-meta').textContent = ts.state + ' · ' + ts.peers_online + '/' + ts.peers_total + ' peers online';
+    $('detail-meta').textContent = tsStateLabel(ts.state) + ' · ' + ts.peers_online + '/' + ts.peers_total + ' peers online';
 
     const statsHtml =
-      statItem('State', esc(ts.state || '—'), running ? 'ok' : 'warn') +
+      statItem('State', esc(tsStateLabel(ts.state)), running ? 'ok' : 'warn') +
       statItem('IP', esc(ts.tailscale_ip || '—'), 'accent') +
       (ts.dns_name    ? statItem('DNS name', esc(ts.dns_name)) : '') +
       statItem('Peers online', ts.peers_online, ts.peers_online > 0 ? 'ok' : '') +

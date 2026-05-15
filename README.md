@@ -134,6 +134,7 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `TAILSCALE_AUTHKEY` | (unset) | Tailscale auth key (pre-auth key or OAuth client secret). Set to enable embedded Tailscale — the container joins the tailnet as its own node and publishes the dashboard via `tailscale serve`. |
 | `TAILSCALE_HOSTNAME` | `brainless-dash` | Tailscale node name shown in the admin console and used in the MagicDNS hostname (`<hostname>.<tailnet>.ts.net`). |
 | `TAILSCALE_STATE_DIR` | `/data/tailscale` | Container path where embedded Tailscale persists its state. Mount a persistent volume here so the node reconnects on restart without consuming a new auth key. |
+| `TAILSCALE_SERVE_PORT` | `8443` | HTTPS port Tailscale serves the dashboard on (`https://<hostname>.ts.net:8443/`). Change to `443` for the default HTTPS port (no port suffix in the URL), but only if nothing else on your host already binds Tailscale IP:443 (e.g. the Unraid web interface). |
 
 ### HTTPS — manual certificates
 
@@ -357,6 +358,7 @@ volumes:
 environment:
   - TAILSCALE_AUTHKEY=tskey-auth-xxxxxxxxxxxxxxxx
   - TAILSCALE_HOSTNAME=brainless-dash   # shows as hostname.tailXXXX.ts.net
+  - TAILSCALE_SERVE_PORT=8443           # change to 443 to drop the port suffix from the URL
 ```
 
 **What happens at startup**

@@ -55,7 +55,18 @@ services:
       - ACME_DNS_PLUGIN=
       - ACME_DNS_CREDENTIALS=
       - ACME_CHALLENGE_PORT=8180
-      # Tailscale: mount the tailscaled socket to enable the Tailscale status card.
+      # ── Tailscale ──────────────────────────────────────────────────────────────
+      # Option A: Read status from the host's existing Tailscale installation.
+      #   Mount the host socket (read-only) to show a status card in the dashboard.
       #   volumes:
       #     - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock:ro
       - TAILSCALE_SOCKET=/var/run/tailscale/tailscaled.sock
+      # Option B: Embedded Tailscale — container joins Tailscale as its own node
+      #   and publishes the dashboard via `tailscale serve` (HTTPS at https://<hostname>.ts.net).
+      #   Requires MagicDNS + HTTPS enabled in https://login.tailscale.com/admin/dns.
+      #   Persist state so the node reconnects without re-auth on restart:
+      #   volumes:
+      #     - /mnt/user/appdata/brainless-dash/tailscale:/data/tailscale
+      - TAILSCALE_AUTHKEY=
+      - TAILSCALE_HOSTNAME=brainless-dash
+      - TAILSCALE_STATE_DIR=/data/tailscale

@@ -97,6 +97,51 @@ if [ -n "$ACME_DOMAIN" ] && [ -n "$ACME_EMAIL" ]; then
     fi
 fi
 
+# ── Embedded Tailscale connectivity ───────────────────────────────────────────
+# Set TAILSCALE_AUTHKEY to start tailscaled inside the container and publish
+# the dashboard via `tailscale serve` (HTTPS at https://<hostname>.ts.net).
+# Requires MagicDNS and HTTPS certificates to be enabled in the Tailscale admin
+# console (https://login.tailscale.com/admin/dns). State is persisted in
+# TAILSCALE_STATE_DIR so the node reconnects without re-auth on restart.
+if [ -n "$TAILSCALE_AUTHKEY" ]; then
+    TS_STATE="${TAILSCALE_STATE_DIR:-/data/tailscale}"
+    mkdir -p "$TS_STATE" /var/run/tailscale
+    chown monitor:monitor "$TS_STATE"
+
+    echo "[tailscale] Starting tailscaled (userspace networking)..."
+    tailscaled \
+        --tun=userspace-networking \
+        --statefile="$TS_STATE/tailscaled.state" \
+        --socket=/var/run/tailscale/tailscaled.sock \
+        > /tmp/tailscaled.log 2>&1 &
+
+    # Wait for the socket to appear (up to 10 s).
+    for i in $(seq 1 20); do
+        [ -S /var/run/tailscale/tailscaled.sock ] && break
+        sleep 0.5
+    done
+
+    if [ ! -S /var/run/tailscale/tailscaled.sock ]; then
+        echo "[tailscale] WARNING: tailscaled did not start — skipping Tailscale setup."
+    else
+        echo "[tailscale] Connecting to tailnet as '${TAILSCALE_HOSTNAME:-brainless-dash}'..."
+        if tailscale up \
+               --authkey="$TAILSCALE_AUTHKEY" \
+               --hostname="${TAILSCALE_HOSTNAME:-brainless-dash}" \
+               --accept-dns=false \
+               --accept-routes=false; then
+            echo "[tailscale] Connected. Configuring serve on port ${PORT:-8090}..."
+            if tailscale serve http://localhost:"${PORT:-8090}"; then
+                echo "[tailscale] Serve configured. Dashboard accessible via Tailscale HTTPS."
+            else
+                echo "[tailscale] WARNING: tailscale serve failed — check that MagicDNS and HTTPS are enabled in your Tailscale admin console."
+            fi
+        else
+            echo "[tailscale] WARNING: tailscale up failed — check TAILSCALE_AUTHKEY."
+        fi
+    fi
+fi
+
 # Build SSL args as an array to handle paths with spaces correctly.
 SSL_ARGS=()
 if [ -n "$HTTPS_CERT" ] && [ -n "$HTTPS_KEY" ]; then

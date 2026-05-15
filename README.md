@@ -130,7 +130,10 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TAILSCALE_SOCKET` | `/var/run/tailscale/tailscaled.sock` | Path inside the container to the Tailscale daemon socket. The card appears automatically when the socket is reachable. |
+| `TAILSCALE_SOCKET` | `/var/run/tailscale/tailscaled.sock` | Path inside the container to a Tailscale daemon socket. The status card appears automatically when the socket is reachable (works for both host-mounted and embedded Tailscale). |
+| `TAILSCALE_AUTHKEY` | (unset) | Tailscale auth key (pre-auth key or OAuth client secret). Set to enable embedded Tailscale — the container joins the tailnet as its own node and publishes the dashboard via `tailscale serve`. |
+| `TAILSCALE_HOSTNAME` | `brainless-dash` | Tailscale node name shown in the admin console and used in the MagicDNS hostname (`<hostname>.<tailnet>.ts.net`). |
+| `TAILSCALE_STATE_DIR` | `/data/tailscale` | Container path where embedded Tailscale persists its state. Mount a persistent volume here so the node reconnects on restart without consuming a new auth key. |
 
 ### HTTPS — manual certificates
 
@@ -159,7 +162,8 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `/proc` | `/proc` | ro | CPU, memory, network counters, load averages |
 | `/mnt` | `/mnt` | ro | Unraid array disks, cache pools for capacity reporting |
 | `/data/certs` | e.g. `/mnt/user/appdata/brainless-dash/certs` | rw | ACME certificate storage (required for Let's Encrypt) |
-| `/var/run/tailscale/tailscaled.sock` | `/var/run/tailscale/tailscaled.sock` | ro | Tailscale daemon socket (optional, enables the Tailscale card) |
+| `/var/run/tailscale/tailscaled.sock` | `/var/run/tailscale/tailscaled.sock` | ro | Tailscale host socket (optional, enables the Tailscale status card without embedded Tailscale) |
+| `/data/tailscale` | e.g. `/mnt/user/appdata/brainless-dash/tailscale` | rw | Embedded Tailscale state (required when `TAILSCALE_AUTHKEY` is set, so the node reconnects without re-auth on restart) |
 
 The `/data/certs` mount is only needed if you use ACME or manual cert files.
 
@@ -316,16 +320,54 @@ Without these extras, the drill-down still works but the operator list and gamem
 
 ### Tailscale
 
-The Tailscale card shows the VPN state, Tailscale IP address, MagicDNS hostname, and peer count. The detail view lists all peers with their online status, IPs, and OS.
+The Tailscale card shows VPN state, Tailscale IP, MagicDNS hostname, and peer count. The detail view lists all peers with online status, IP, OS, and last-seen time.
 
-No API key is needed. The card appears automatically when the `tailscaled` Unix socket is accessible inside the container. Mount it read-only:
+There are 2 ways to use Tailscale with Brainless-Dash:
+
+---
+
+#### Option A: Host socket (read-only status card)
+
+If Tailscale is already running on the Unraid host, mount the `tailscaled` socket read-only. The card appears automatically — no auth key needed.
 
 ```yaml
 volumes:
   - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock:ro
 ```
 
-The socket lives at `/var/run/tailscale/tailscaled.sock` on the host when `tailscaled` is running. The default `TAILSCALE_SOCKET` env var points to the same path inside the container, so no extra configuration is needed beyond the volume mount.
+---
+
+#### Option B: Embedded Tailscale (publish the dashboard over Tailscale)
+
+The container runs its own `tailscaled` daemon, joins your tailnet, and publishes the dashboard via `tailscale serve`. The dashboard becomes accessible at `https://<hostname>.<tailnet>.ts.net` with a valid TLS certificate — no port forwarding, no manual cert management.
+
+**Prerequisites**
+
+- MagicDNS and HTTPS certificates enabled in the [Tailscale admin console](https://login.tailscale.com/admin/dns)
+- A pre-auth key or OAuth client credential from the [Tailscale admin console](https://login.tailscale.com/admin/settings/keys)
+
+OAuth keys are recommended for containers — they do not expire and can create new nodes automatically.
+
+**Configuration**
+
+```yaml
+volumes:
+  # Persistent state: node reconnects without re-auth on container restart.
+  - /mnt/user/appdata/brainless-dash/tailscale:/data/tailscale
+environment:
+  - TAILSCALE_AUTHKEY=tskey-auth-xxxxxxxxxxxxxxxx
+  - TAILSCALE_HOSTNAME=brainless-dash   # shows as hostname.tailXXXX.ts.net
+```
+
+**What happens at startup**
+
+1. `tailscaled` starts in [userspace networking](https://tailscale.com/kb/1112/userspace-networking) mode — no privileged mode or `/dev/net/tun` needed.
+2. `tailscale up` authenticates (or reconnects if state is present).
+3. `tailscale serve` configures HTTPS proxying from the tailnet to the local dashboard port.
+
+The dashboard remains accessible on the LAN as well (`http://<unraid-ip>:<PORT>`). Both access paths work simultaneously.
+
+> **Note:** If you also set `ACME_DOMAIN` or `HTTPS_CERT`, those apply to the LAN-facing HTTPS endpoint. The Tailscale HTTPS endpoint is managed independently by Tailscale.
 
 ---
 

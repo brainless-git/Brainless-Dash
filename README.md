@@ -35,6 +35,7 @@ A lightweight, mobile-first web dashboard for monitoring an Unraid server. Runs 
 - [SABnzbd](#sabnzbd) — active downloads, speed, and queue
 - [qBittorrent](#qbittorrent) — download/upload speeds and torrent counts
 - [Minecraft](#minecraft) — server status, favicon, MOTD, latency, version, online players, and Forge mod list
+- [Tailscale](#tailscale) — VPN state, Tailscale IP, MagicDNS hostname, and peer list
 - [HTTPS / Let's Encrypt](#https--lets-encrypt) — automatic TLS with DNS challenge (Cloudflare, DigitalOcean, DuckDNS) or manual cert files
 
 ## Stack
@@ -125,6 +126,12 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `MC_RCON_PORT` | `25575` | RCON port on the Minecraft server. |
 | `MC_RCON_PASSWORD` | (unset) | RCON password. Set this to enable the Op / Deop buttons in the Minecraft drill-down view. Requires `enable-rcon=true` and a matching `rcon.password` in your `server.properties`. |
 
+### Tailscale
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TAILSCALE_SOCKET` | `/var/run/tailscale/tailscaled.sock` | Path inside the container to the Tailscale daemon socket. The card appears automatically when the socket is reachable. |
+
 ### HTTPS — manual certificates
 
 | Variable | Default | Description |
@@ -152,6 +159,7 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `/proc` | `/proc` | ro | CPU, memory, network counters, load averages |
 | `/mnt` | `/mnt` | ro | Unraid array disks, cache pools for capacity reporting |
 | `/data/certs` | e.g. `/mnt/user/appdata/brainless-dash/certs` | rw | ACME certificate storage (required for Let's Encrypt) |
+| `/var/run/tailscale/tailscaled.sock` | `/var/run/tailscale/tailscaled.sock` | ro | Tailscale daemon socket (optional, enables the Tailscale card) |
 
 The `/data/certs` mount is only needed if you use ACME or manual cert files.
 
@@ -303,6 +311,21 @@ environment:
 ```
 
 Without these extras, the drill-down still works but the operator list and gamemode display as `—` and the op/deop buttons are hidden.
+
+---
+
+### Tailscale
+
+The Tailscale card shows the VPN state, Tailscale IP address, MagicDNS hostname, and peer count. The detail view lists all peers with their online status, IPs, and OS.
+
+No API key is needed. The card appears automatically when the `tailscaled` Unix socket is accessible inside the container. Mount it read-only:
+
+```yaml
+volumes:
+  - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock:ro
+```
+
+The socket lives at `/var/run/tailscale/tailscaled.sock` on the host when `tailscaled` is running. The default `TAILSCALE_SOCKET` env var points to the same path inside the container, so no extra configuration is needed beyond the volume mount.
 
 ---
 
@@ -465,6 +488,7 @@ Edit `docker-compose.yml` to set your credentials before running.
 | `/api/sabnzbd` | GET | SABnzbd queue (404 if not configured) |
 | `/api/qbittorrent` | GET | qBittorrent stats (404 if not configured) |
 | `/api/minecraft` | GET | Minecraft server status (404 if not configured) |
+| `/api/tailscale` | GET | Tailscale status (404 if socket not available) |
 
 All responses are JSON.
 

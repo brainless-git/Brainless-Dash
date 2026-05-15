@@ -55,7 +55,8 @@ ENV PORT=8090 \
     ACME_EMAIL= \
     ACME_DNS_PLUGIN= \
     ACME_DNS_CREDENTIALS= \
-    ACME_CHALLENGE_PORT=8180
+    ACME_CHALLENGE_PORT=8180 \
+    TAILSCALE_SOCKET=/var/run/tailscale/tailscaled.sock
 
 # Entrypoint runs as root so it can write to host-mounted volumes (e.g. /data/certs),
 # then drops to monitor (UID 1001) via gosu before exec'ing uvicorn.

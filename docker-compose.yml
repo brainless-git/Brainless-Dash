@@ -55,3 +55,7 @@ services:
       - ACME_DNS_PLUGIN=
       - ACME_DNS_CREDENTIALS=
       - ACME_CHALLENGE_PORT=8180
+      # Tailscale: mount the tailscaled socket to enable the Tailscale status card.
+      #   volumes:
+      #     - /var/run/tailscale/tailscaled.sock:/var/run/tailscale/tailscaled.sock:ro
+      - TAILSCALE_SOCKET=/var/run/tailscale/tailscaled.sock

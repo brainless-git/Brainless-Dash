@@ -1122,7 +1122,7 @@ body {
     gap: 16px;
   }
   /* Span full width on tablet; overridden at desktop */
-  #card-system, #card-resources, #card-sonarr, #card-plex, #card-minecraft, #card-tailscale { grid-column: 1 / -1; }
+  #card-system, #card-resources, #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
   body { font-size: 14px; }
   .rate-value { font-size: 18px; }
 }
@@ -1137,7 +1137,7 @@ body {
   #card-system, #card-resources { grid-column: auto; }
   /* SABnzbd + qBittorrent each span 2 so they share a row */
   #card-sabnzbd, #card-qbittorrent { grid-column: span 2; }
-  #card-sonarr, #card-plex, #card-minecraft, #card-tailscale { grid-column: 1 / -1; }
+  #card-sonarr, #card-plex, #card-minecraft { grid-column: 1 / -1; }
 }
 
 /* Wide desktop — 4 columns, cards pair up side-by-side */
@@ -1154,22 +1154,6 @@ body {
   #card-storage, #card-network,
   #card-sabnzbd, #card-qbittorrent { grid-column: span 2; }
   /* Service cards: pair up two-per-row instead of stretching full-width */
-  #card-sonarr, #card-plex, #card-minecraft, #card-tailscale { grid-column: span 2; }
+  #card-sonarr, #card-plex, #card-minecraft { grid-column: span 2; }
   .rate-value { font-size: 20px; }
 }
-
-/* Tailscale peer list */
-.ts-peer-list { display: flex; flex-direction: column; gap: 4px; }
-.ts-peer-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  background: var(--bg);
-  border-radius: 4px;
-  font-size: 13px;
-  flex-wrap: wrap;
-}
-.ts-peer-hostname { flex: 1; font-weight: 600; color: var(--text); min-width: 80px; }
-.ts-peer-ip { color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
-.ts-peer-os { color: var(--text-faint); font-size: 11px; text-transform: capitalize; }

@@ -106,14 +106,6 @@ def minecraft_stats():
     return result
 
 
-@app.get("/api/tailscale")
-def tailscale_stats():
-    result = stats.get_tailscale()
-    if result is None:
-        return JSONResponse({"error": "Tailscale socket not available"}, status_code=404)
-    return result
-
-
 @app.post("/api/minecraft/{action}")
 def minecraft_op_action(action: str, payload: dict = Body(default={})):
     if action not in ("op", "deop"):

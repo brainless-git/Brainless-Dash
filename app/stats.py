@@ -1174,6 +1174,7 @@ def _compact_sonarr(sonarr):
 
 
 def collect_all():
+    from . import spotify as _spotify
     result = {
         "timestamp": int(time.time()),
         "hostname":  _HOSTNAME,
@@ -1200,4 +1201,7 @@ def collect_all():
     mc = get_minecraft()
     if mc is not None:
         result["minecraft"] = _compact_minecraft(mc)
+    sp = _spotify.get_playback()
+    if sp is not None:
+        result["spotify"] = sp
     return result

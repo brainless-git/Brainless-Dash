@@ -41,6 +41,12 @@ services:
       # Set enable-rcon=true and rcon.password in your server.properties first.
       - MC_RCON_PORT=25575
       - MC_RCON_PASSWORD=
+      # Spotify — set Client ID + Secret to enable the playback card.
+      # Create an app at https://developer.spotify.com/dashboard and add
+      # http://<host>:8090/api/spotify/callback as a Redirect URI.
+      - SPOTIFY_CLIENT_ID=
+      - SPOTIFY_CLIENT_SECRET=
+      - SPOTIFY_REDIRECT_URI=
       # Manual cert paths (skip if using ACME_DOMAIN below)
       - HTTPS_CERT=
       - HTTPS_KEY=

@@ -3,10 +3,10 @@ import os
 from pathlib import Path
 
 from fastapi import Body, FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import stats
+from . import spotify, stats
 
 app = FastAPI(title="Brainless-Dash", version="1.0.0")
 
@@ -112,6 +112,40 @@ def minecraft_op_action(action: str, payload: dict = Body(default={})):
         return JSONResponse({"ok": False, "error": "unknown action"}, status_code=404)
     player = (payload.get("player") or "").strip()
     result = stats.mc_op_action(action, player)
+    return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
+@app.get("/api/spotify/auth")
+def spotify_auth():
+    if not spotify._CLIENT_ID:
+        return JSONResponse({"error": "SPOTIFY_CLIENT_ID not configured"}, status_code=404)
+    return RedirectResponse(spotify.get_auth_url())
+
+
+@app.get("/api/spotify/callback")
+def spotify_callback(code: str = None, state: str = None, error: str = None):
+    if error:
+        return JSONResponse({"error": error}, status_code=400)
+    if not code:
+        return JSONResponse({"error": "no code received"}, status_code=400)
+    if state != spotify._oauth_state or not spotify._oauth_state:
+        return JSONResponse({"error": "invalid state parameter"}, status_code=400)
+    if spotify.exchange_code(code):
+        return RedirectResponse("/")
+    return JSONResponse({"error": "token exchange failed"}, status_code=500)
+
+
+@app.get("/api/spotify")
+def spotify_stats():
+    result = spotify.get_playback()
+    if result is None:
+        return JSONResponse({"error": "SPOTIFY_CLIENT_ID not configured"}, status_code=404)
+    return result
+
+
+@app.post("/api/spotify/{action}")
+def spotify_action(action: str, payload: dict = Body(default={})):
+    result = spotify.spotify_action(action, **payload)
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 

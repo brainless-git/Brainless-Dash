@@ -4,6 +4,12 @@
 
   const $ = (id) => document.getElementById(id);
 
+  function fmtMs(ms) {
+    const s = Math.floor((ms || 0) / 1000);
+    const m = Math.floor(s / 60);
+    return m + ':' + String(s % 60).padStart(2, '0');
+  }
+
   function fmtBytes(n) {
     if (n === null || n === undefined || isNaN(n)) return '—';
     const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
@@ -234,6 +240,150 @@
       canvas.height = canvas.offsetHeight || 180;
       drawFn(canvas);
     }, 0);
+  }
+
+  // ── Spotify ──────────────────────────────────────────────────────────────────
+
+  // Local progress interpolation — updated on every poll
+  let _spLastPoll = 0;
+  let _spProgressMs = 0;
+  let _spDurationMs = 0;
+  let _spPlaying = false;
+  let _spProgressTimer = null;
+
+  function _startSpProgressTimer() {
+    if (_spProgressTimer) return;
+    _spProgressTimer = setInterval(() => {
+      if (!_spPlaying || !_spDurationMs) return;
+      const elapsed = Date.now() - _spLastPoll;
+      const pos = Math.min(_spProgressMs + elapsed, _spDurationMs);
+      const pct = (pos / _spDurationMs) * 100;
+      const bar = $('spotify-bar');
+      const posEl = $('spotify-pos');
+      if (bar) bar.style.width = pct.toFixed(1) + '%';
+      if (posEl) posEl.textContent = fmtMs(pos);
+    }, 500);
+  }
+
+  async function _spotifyControl(action, params) {
+    try {
+      const r = await fetch('/api/spotify/' + action, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params || {}),
+      });
+      if (r.ok) setTimeout(tick, 300);
+    } catch (e) {
+      console.error('Spotify control failed:', e);
+    }
+  }
+
+  function renderSpotify(sp) {
+    const card = $('card-spotify');
+    if (!sp || !sp.configured) {
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = '';
+
+    if (!sp.authorized) {
+      $('spotify-meta').textContent = 'not authorised';
+      $('spotify-body').innerHTML =
+        '<div class="spotify-auth">' +
+          '<p>Authorise Brainless-Dash to read and control Spotify playback.</p>' +
+          '<a href="/api/spotify/auth" class="spotify-auth-btn">Connect Spotify</a>' +
+        '</div>';
+      return;
+    }
+
+    if (!sp.active) {
+      $('spotify-meta').textContent = sp.device_name || 'idle';
+      $('spotify-body').innerHTML = '<div class="spotify-idle">No active playback</div>';
+      _spPlaying = false;
+      return;
+    }
+
+    // Update local progress interpolation
+    _spLastPoll    = Date.now();
+    _spProgressMs  = sp.progress_ms || 0;
+    _spDurationMs  = sp.duration_ms || 0;
+    _spPlaying     = sp.is_playing;
+    _startSpProgressTimer();
+
+    const pct = _spDurationMs > 0 ? Math.min(100, (_spProgressMs / _spDurationMs) * 100) : 0;
+
+    $('spotify-meta').textContent = sp.device_name || '';
+
+    const artHtml = sp.art_url
+      ? '<img class="spotify-art" src="' + esc(sp.art_url) + '" alt="">'
+      : '<div class="spotify-art spotify-art-empty"></div>';
+
+    const shuffleCls = sp.shuffle ? ' active' : '';
+    const repeatCls  = sp.repeat !== 'off' ? ' active' : '';
+    const repeatTitle = sp.repeat === 'track' ? 'Repeat: track' : sp.repeat === 'context' ? 'Repeat: playlist' : 'Repeat: off';
+
+    const volHtml = sp.volume != null
+      ? '<label class="spotify-vol">' +
+          '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>' +
+          '<input type="range" class="spotify-vol-range" min="0" max="100" value="' + sp.volume + '" aria-label="Volume">' +
+        '</label>'
+      : '';
+
+    $('spotify-body').innerHTML =
+      '<div class="spotify-now-playing">' +
+        artHtml +
+        '<div class="spotify-info">' +
+          '<div class="spotify-track">' + esc(sp.track || '—') + '</div>' +
+          '<div class="spotify-artist">' + esc(sp.artist || '—') + '</div>' +
+          (sp.album ? '<div class="spotify-album">' + esc(sp.album) + '</div>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="spotify-progress">' +
+        '<span id="spotify-pos" class="spotify-time">' + fmtMs(sp.progress_ms) + '</span>' +
+        '<div class="bar spotify-prog-bar"><div class="bar-fill spotify-prog-fill" id="spotify-bar" style="width:' + pct.toFixed(1) + '%"></div></div>' +
+        '<span class="spotify-time">' + fmtMs(sp.duration_ms) + '</span>' +
+      '</div>' +
+      '<div class="spotify-controls">' +
+        '<button class="spotify-btn' + shuffleCls + '" id="sp-shuffle" title="' + (sp.shuffle ? 'Shuffle on' : 'Shuffle off') + '" aria-pressed="' + sp.shuffle + '">' +
+          '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>' +
+        '</button>' +
+        '<button class="spotify-btn" id="sp-prev" title="Previous">' +
+          '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>' +
+        '</button>' +
+        '<button class="spotify-btn spotify-btn-play" id="sp-toggle" title="' + (sp.is_playing ? 'Pause' : 'Play') + '">' +
+          (sp.is_playing
+            ? '<svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
+            : '<svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>') +
+        '</button>' +
+        '<button class="spotify-btn" id="sp-next" title="Next">' +
+          '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>' +
+        '</button>' +
+        '<button class="spotify-btn' + repeatCls + '" id="sp-repeat" title="' + repeatTitle + '" aria-label="' + repeatTitle + '">' +
+          (sp.repeat === 'track'
+            ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>'
+            : '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>') +
+        '</button>' +
+        volHtml +
+      '</div>';
+
+    // Wire buttons
+    const nextRepeat = { off: 'context', context: 'track', track: 'off' }[sp.repeat] || 'off';
+
+    $('sp-shuffle').addEventListener('click', () => _spotifyControl('shuffle', { state: !sp.shuffle }));
+    $('sp-prev').addEventListener('click',    () => _spotifyControl('previous'));
+    $('sp-toggle').addEventListener('click',  () => _spotifyControl(sp.is_playing ? 'pause' : 'play'));
+    $('sp-next').addEventListener('click',    () => _spotifyControl('next'));
+    $('sp-repeat').addEventListener('click',  () => _spotifyControl('repeat', { mode: nextRepeat }));
+
+    // Volume: debounce to avoid flooding the API
+    const volRange = document.querySelector('.spotify-vol-range');
+    if (volRange) {
+      let volTimer = null;
+      volRange.addEventListener('input', () => {
+        clearTimeout(volTimer);
+        volTimer = setTimeout(() => _spotifyControl('volume', { volume_percent: parseInt(volRange.value, 10) }), 400);
+      });
+    }
   }
 
   // ── Sonarr change detection ──────────────────────────────────────────────────
@@ -545,6 +695,9 @@
     } else {
       qbCard.style.display = 'none';
     }
+
+    // Spotify
+    renderSpotify(d.spotify);
 
     // Footer
     $('last-update').textContent = new Date().toLocaleTimeString();

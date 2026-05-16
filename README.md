@@ -125,6 +125,16 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `MC_RCON_PORT` | `25575` | RCON port on the Minecraft server. |
 | `MC_RCON_PASSWORD` | (unset) | RCON password. Set this to enable the Op / Deop buttons in the Minecraft drill-down view. Requires `enable-rcon=true` and a matching `rcon.password` in your `server.properties`. |
 
+### Spotify
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SPOTIFY_CLIENT_ID` | (unset) | Spotify app Client ID. Set this to enable the playback card. Create an app at the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and add `http://<host>:<port>/api/spotify/callback` as a Redirect URI. |
+| `SPOTIFY_CLIENT_SECRET` | (unset) | Spotify app Client Secret. |
+| `SPOTIFY_REDIRECT_URI` | `http://localhost:8090/api/spotify/callback` | OAuth callback URI. Must match the Redirect URI registered in the Spotify app settings exactly. |
+
+Once the env vars are set, open the dashboard and click **Connect Spotify** on the card. You will be redirected to Spotify to authorise access. After authorising, the card shows the currently playing track with play, pause, skip, shuffle, and repeat controls.
+
 ### HTTPS — manual certificates
 
 | Variable | Default | Description |

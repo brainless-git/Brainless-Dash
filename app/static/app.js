@@ -288,9 +288,15 @@
 
     if (!sp.authorized) {
       $('spotify-meta').textContent = 'not authorised';
+      const uriNote = sp.redirect_uri
+        ? '<p class="spotify-auth-uri">Add this Redirect URI in your ' +
+            '<a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify app settings</a>:' +
+            '<br><code>' + esc(sp.redirect_uri) + '</code></p>'
+        : '';
       $('spotify-body').innerHTML =
         '<div class="spotify-auth">' +
           '<p>Authorise Brainless-Dash to read and control Spotify playback.</p>' +
+          uriNote +
           '<a href="/api/spotify/auth" class="spotify-auth-btn">Connect Spotify</a>' +
         '</div>';
       return;

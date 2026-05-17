@@ -1173,7 +1173,7 @@ def _compact_sonarr(sonarr):
     return {**sonarr, "episodes": eps}
 
 
-def collect_all():
+def collect_all(base_url: str = ""):
     from . import spotify as _spotify
     result = {
         "timestamp": int(time.time()),
@@ -1203,5 +1203,7 @@ def collect_all():
         result["minecraft"] = _compact_minecraft(mc)
     sp = _spotify.get_playback()
     if sp is not None:
+        if not sp.get("authorized"):
+            sp["redirect_uri"] = _spotify.get_redirect_uri(base_url)
         result["spotify"] = sp
     return result

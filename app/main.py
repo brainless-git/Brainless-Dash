@@ -152,6 +152,14 @@ def spotify_stats(request: Request):
     return result
 
 
+@app.get("/api/spotify/detail")
+def spotify_detail():
+    result = spotify.get_detail()
+    if result is None:
+        return JSONResponse({"error": "SPOTIFY_CLIENT_ID not configured"}, status_code=404)
+    return result
+
+
 @app.post("/api/spotify/{action}")
 def spotify_action(action: str, payload: dict = Body(default={})):
     result = spotify.spotify_action(action, **payload)

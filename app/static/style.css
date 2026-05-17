@@ -1349,3 +1349,160 @@ body {
   #card-sonarr, #card-plex, #card-minecraft, #card-spotify { grid-column: span 2; }
   .rate-value { font-size: 20px; }
 }
+
+/* Spotify detail view */
+.sp-detail-now-playing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.sp-detail-art {
+  width: 140px;
+  height: 140px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+}
+.sp-art-empty {
+  background: var(--border);
+}
+.sp-detail-info {
+  min-width: 0;
+  width: 100%;
+}
+.sp-detail-track {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.sp-detail-artist {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+.sp-detail-album {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+.sp-context {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+}
+.sp-context-name {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+.sp-detail-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.sp-prog-bar {
+  flex: 1;
+  height: 5px !important;
+  border-radius: 3px;
+}
+.sp-track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sp-track-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+.sp-track-item:hover { background: var(--border); }
+.sp-track-art {
+  width: 40px;
+  height: 40px;
+  border-radius: 3px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--border);
+}
+.sp-track-info { flex: 1; min-width: 0; }
+.sp-track-name {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-track-sub {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.sp-track-dur {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.sp-track-ago {
+  white-space: nowrap;
+}
+.sp-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sp-device-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--border-soft);
+  transition: border-color 0.15s, background 0.15s;
+}
+.sp-device-item[data-device-id] {
+  cursor: pointer;
+}
+.sp-device-item[data-device-id]:hover {
+  background: var(--border);
+  border-color: var(--text-faint);
+}
+.sp-device-active {
+  border-color: #1DB954;
+}
+.sp-device-icon { font-size: 20px; flex-shrink: 0; }
+.sp-device-info { min-width: 0; }
+.sp-device-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.sp-device-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 1px;
+}
+.sp-device-playing { color: #1DB954; }
+.sp-scope-hint {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.6;
+}
+.sp-scope-hint a { color: var(--text-dim); }
+
+@media (min-width: 700px) {
+  .sp-detail-now-playing {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  .sp-detail-info { width: auto; }
+}

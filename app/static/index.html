@@ -233,7 +233,7 @@
     </div>
   </section>
 
-  <section class="card module-card" id="card-spotify" style="display:none">
+  <section class="card module-card" id="card-spotify" data-module="spotify" tabindex="0" role="link" style="display:none">
     <div class="card-head">
       <div class="card-title">
         <svg class="card-logo" viewBox="0 0 16 16" aria-hidden="true">
@@ -244,7 +244,10 @@
         </svg>
         <h2>Spotify</h2>
       </div>
-      <span class="meta" id="spotify-meta">—</span>
+      <div class="card-head-end">
+        <span class="meta" id="spotify-meta">—</span>
+        <span class="chevron" id="spotify-chevron" style="display:none">›</span>
+      </div>
     </div>
     <div id="spotify-body">
       <div class="empty">connecting…</div>

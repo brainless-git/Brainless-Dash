@@ -262,6 +262,10 @@
       const posEl = $('spotify-pos');
       if (bar) bar.style.width = pct.toFixed(1) + '%';
       if (posEl) posEl.textContent = fmtMs(pos);
+      const dBar = $('sp-det-bar');
+      const dPos = $('sp-det-pos');
+      if (dBar) dBar.style.width = pct.toFixed(1) + '%';
+      if (dPos) dPos.textContent = fmtMs(pos);
     }, 500);
   }
 
@@ -272,7 +276,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(params || {}),
       });
-      if (r.ok) setTimeout(tick, 300);
+      if (r.ok) setTimeout(() => { if (currentModule === 'spotify') renderDetail(); else tick(); }, 300);
     } catch (e) {
       console.error('Spotify control failed:', e);
     }
@@ -285,6 +289,8 @@
       return;
     }
     card.style.display = '';
+    const chev = $('spotify-chevron');
+    if (chev) chev.style.display = sp.authorized ? '' : 'none';
 
     if (!sp.authorized) {
       $('spotify-meta').textContent = 'not authorised';
@@ -730,14 +736,15 @@
   // ── Detail view router ──────────────────────────────────────────────────────
 
   const MODULES = {
-    minecraft:   { title: 'Minecraft',     endpoint: '/api/minecraft',   render: renderMinecraftDetail },
-    qbittorrent: { title: 'qBittorrent',   endpoint: '/api/qbittorrent', render: renderQbDetail },
-    sabnzbd:     { title: 'SABnzbd',       endpoint: '/api/sabnzbd',     render: renderSabDetail },
-    sonarr:      { title: 'Sonarr',        endpoint: '/api/sonarr',      render: renderSonarrDetail },
-    plex:        { title: 'Plex',          endpoint: '/api/plex',        render: renderPlexDetail },
-    temps:       { title: 'Temperatures',  endpoint: '/api/temps',       render: renderTempsDetail },
-    network:     { title: 'Network',       endpoint: '/api/network',     render: renderNetworkDetail },
-    storage:     { title: 'Storage',       endpoint: '/api/storage',     render: renderStorageDetail },
+    minecraft:   { title: 'Minecraft',     endpoint: '/api/minecraft',      render: renderMinecraftDetail },
+    qbittorrent: { title: 'qBittorrent',   endpoint: '/api/qbittorrent',    render: renderQbDetail },
+    sabnzbd:     { title: 'SABnzbd',       endpoint: '/api/sabnzbd',        render: renderSabDetail },
+    sonarr:      { title: 'Sonarr',        endpoint: '/api/sonarr',         render: renderSonarrDetail },
+    plex:        { title: 'Plex',          endpoint: '/api/plex',           render: renderPlexDetail },
+    temps:       { title: 'Temperatures',  endpoint: '/api/temps',          render: renderTempsDetail },
+    network:     { title: 'Network',       endpoint: '/api/network',        render: renderNetworkDetail },
+    storage:     { title: 'Storage',       endpoint: '/api/storage',        render: renderStorageDetail },
+    spotify:     { title: 'Spotify',       endpoint: '/api/spotify/detail', render: renderSpotifyDetail },
   };
 
   let currentModule = null;
@@ -1417,6 +1424,248 @@
     mountCanvas('net-detail-canvas', drawNetGraph);
   }
 
+  function _deviceIcon(type) {
+    const t = (type || '').toLowerCase();
+    if (t === 'smartphone')  return '📱';
+    if (t === 'computer')    return '💻';
+    if (t === 'speaker')     return '🔊';
+    if (t === 'tv')          return '📺';
+    if (t === 'automobile')  return '🚗';
+    if (t === 'gameconsole') return '🎮';
+    return '🎵';
+  }
+
+  function _timeAgo(iso) {
+    const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (diff < 1)  return 'just now';
+    if (diff < 60) return diff + 'm ago';
+    const h = Math.floor(diff / 60);
+    if (h < 24)    return h + 'h ago';
+    return Math.floor(h / 24) + 'd ago';
+  }
+
+  function renderSpotifyDetail(data) {
+    const pb = data.playback || {};
+
+    if (!pb.authorized) {
+      $('detail-meta').textContent = 'not authorised';
+      $('detail-body').innerHTML =
+        '<div class="detail-section"><div class="spotify-auth">' +
+          '<p>Authorise Brainless-Dash to read and control Spotify playback.</p>' +
+          '<a href="/api/spotify/auth" class="spotify-auth-btn">Connect Spotify</a>' +
+        '</div></div>';
+      return;
+    }
+
+    if (!pb.active) {
+      $('detail-meta').textContent = pb.device_name || 'idle';
+      $('detail-body').innerHTML =
+        '<div class="detail-section"><div class="spotify-idle">No active playback</div></div>';
+      _spPlaying = false;
+      return;
+    }
+
+    $('detail-meta').textContent = pb.device_name || 'playing';
+
+    // Update progress interpolation state
+    _spLastPoll   = Date.now();
+    _spProgressMs = pb.progress_ms || 0;
+    _spDurationMs = pb.duration_ms || 0;
+    _spPlaying    = pb.is_playing;
+    _startSpProgressTimer();
+
+    const pct = _spDurationMs > 0 ? Math.min(100, (_spProgressMs / _spDurationMs) * 100) : 0;
+
+    const artHtml = pb.art_url
+      ? '<img class="sp-detail-art" src="' + esc(pb.art_url) + '" alt="">'
+      : '<div class="sp-detail-art sp-art-empty"></div>';
+
+    const ctx = data.context || {};
+    const ctxHtml = ctx.name
+      ? '<div class="sp-context">Playing from <span class="sp-context-name">' + esc(ctx.name) + '</span>' +
+          (ctx.owner ? ' by ' + esc(ctx.owner) : '') + '</div>'
+      : '';
+
+    const shuffleCls = pb.shuffle ? ' active' : '';
+    const repeatCls  = pb.repeat !== 'off' ? ' active' : '';
+    const repeatTitle = pb.repeat === 'track' ? 'Repeat: track' : pb.repeat === 'context' ? 'Repeat: playlist' : 'Repeat: off';
+    const nextRepeat  = { off: 'context', context: 'track', track: 'off' }[pb.repeat] || 'off';
+
+    const volHtml = pb.volume != null
+      ? '<label class="spotify-vol">' +
+          '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>' +
+          '<input type="range" class="spotify-vol-range" id="sp-det-vol" min="0" max="100" value="' + pb.volume + '" aria-label="Volume">' +
+        '</label>'
+      : '';
+
+    // Section 1: Now Playing
+    const nowPlayingHtml =
+      '<div class="detail-section">' +
+        '<div class="sp-detail-now-playing">' +
+          artHtml +
+          '<div class="sp-detail-info">' +
+            '<div class="sp-detail-track">' + esc(pb.track || '—') + '</div>' +
+            '<div class="sp-detail-artist">' + esc(pb.artist || '—') + '</div>' +
+            (pb.album ? '<div class="sp-detail-album">' + esc(pb.album) + '</div>' : '') +
+            ctxHtml +
+            '<div class="sp-detail-progress">' +
+              '<span id="sp-det-pos" class="spotify-time">' + fmtMs(pb.progress_ms) + '</span>' +
+              '<div class="bar sp-prog-bar" id="sp-seek-bar" style="cursor:pointer">' +
+                '<div class="bar-fill spotify-prog-fill" id="sp-det-bar" style="width:' + pct.toFixed(1) + '%"></div>' +
+              '</div>' +
+              '<span class="spotify-time">' + fmtMs(pb.duration_ms) + '</span>' +
+            '</div>' +
+            '<div class="spotify-controls">' +
+              '<button class="spotify-btn' + shuffleCls + '" id="sp-det-shuffle" title="' + (pb.shuffle ? 'Shuffle on' : 'Shuffle off') + '" aria-pressed="' + pb.shuffle + '">' +
+                '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>' +
+              '</button>' +
+              '<button class="spotify-btn" id="sp-det-prev" title="Previous">' +
+                '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>' +
+              '</button>' +
+              '<button class="spotify-btn spotify-btn-play" id="sp-det-toggle" title="' + (pb.is_playing ? 'Pause' : 'Play') + '">' +
+                (pb.is_playing
+                  ? '<svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
+                  : '<svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>') +
+              '</button>' +
+              '<button class="spotify-btn" id="sp-det-next" title="Next">' +
+                '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>' +
+              '</button>' +
+              '<button class="spotify-btn' + repeatCls + '" id="sp-det-repeat" title="' + repeatTitle + '" aria-label="' + repeatTitle + '">' +
+                (pb.repeat === 'track'
+                  ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4zm-4-2V9h-1l-2 1v1h1.5v4H13z"/></svg>'
+                  : '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>') +
+              '</button>' +
+              volHtml +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    // Section 2: Up Next
+    const queue = data.queue || [];
+    const queueHtml =
+      '<div class="detail-section"><h3>Up Next</h3>' +
+        '<div class="sp-track-list">' +
+          (queue.length
+            ? queue.map(t => {
+                const artEl = t.art_url
+                  ? '<img class="sp-track-art" src="' + esc(t.art_url) + '" alt="">'
+                  : '<div class="sp-track-art"></div>';
+                const sub = [t.artist, t.album].filter(Boolean).join(' · ');
+                return '<div class="sp-track-item">' +
+                  artEl +
+                  '<div class="sp-track-info">' +
+                    '<div class="sp-track-name">' + esc(t.name) + '</div>' +
+                    (sub ? '<div class="sp-track-sub">' + esc(sub) + '</div>' : '') +
+                  '</div>' +
+                  '<span class="sp-track-dur">' + fmtMs(t.duration_ms) + '</span>' +
+                '</div>';
+              }).join('')
+            : '<div class="empty">queue empty</div>') +
+        '</div>' +
+      '</div>';
+
+    // Section 3: Devices
+    const devices = data.devices || [];
+    const devicesHtml =
+      '<div class="detail-section"><h3>Devices</h3>' +
+        '<div class="sp-device-list">' +
+          (devices.length
+            ? devices.map(dev => {
+                const activeCls = dev.is_active ? ' sp-device-active' : '';
+                const switchAttrs = !dev.is_active
+                  ? ' data-device-id="' + esc(dev.id) + '" role="button" tabindex="0" title="Switch to this device"'
+                  : '';
+                const metaParts = [dev.type];
+                if (dev.is_active) metaParts.push('<span class="sp-device-playing">· playing</span>');
+                if (dev.volume != null) metaParts.push(dev.volume + '%');
+                return '<div class="sp-device-item' + activeCls + '"' + switchAttrs + '>' +
+                  '<span class="sp-device-icon">' + _deviceIcon(dev.type) + '</span>' +
+                  '<div class="sp-device-info">' +
+                    '<div class="sp-device-name">' + esc(dev.name) + '</div>' +
+                    '<div class="sp-device-meta">' + metaParts.join(' ') + '</div>' +
+                  '</div>' +
+                '</div>';
+              }).join('')
+            : '<div class="empty">no devices found</div>') +
+        '</div>' +
+      '</div>';
+
+    // Section 4: Recently Played
+    const recentlyPlayed = data.recently_played || [];
+    let recentHtml;
+    if (data.recent_scope_missing) {
+      recentHtml =
+        '<div class="detail-section"><h3>Recently Played</h3>' +
+          '<div class="sp-scope-hint">Re-authorise Spotify to see history — the app needs the <code>user-read-recently-played</code> scope. ' +
+            '<a href="/api/spotify/auth">Re-authorise</a>' +
+          '</div>' +
+        '</div>';
+    } else {
+      recentHtml =
+        '<div class="detail-section"><h3>Recently Played</h3>' +
+          '<div class="sp-track-list">' +
+            (recentlyPlayed.length
+              ? recentlyPlayed.map(t => {
+                  const artEl = t.art_url
+                    ? '<img class="sp-track-art" src="' + esc(t.art_url) + '" alt="">'
+                    : '<div class="sp-track-art"></div>';
+                  const sub = [t.artist, t.album].filter(Boolean).join(' · ');
+                  return '<div class="sp-track-item">' +
+                    artEl +
+                    '<div class="sp-track-info">' +
+                      '<div class="sp-track-name">' + esc(t.name) + '</div>' +
+                      (sub ? '<div class="sp-track-sub">' + esc(sub) + '</div>' : '') +
+                    '</div>' +
+                    '<span class="sp-track-dur sp-track-ago">' + (t.played_at ? _timeAgo(t.played_at) : '') + '</span>' +
+                  '</div>';
+                }).join('')
+              : '<div class="empty">no history</div>') +
+          '</div>' +
+        '</div>';
+    }
+
+    $('detail-body').innerHTML = nowPlayingHtml + queueHtml + devicesHtml + recentHtml;
+
+    // Wire controls
+    $('sp-det-shuffle').addEventListener('click', () => _spotifyControl('shuffle', { state: !pb.shuffle }));
+    $('sp-det-prev').addEventListener('click',    () => _spotifyControl('previous'));
+    $('sp-det-toggle').addEventListener('click',  () => _spotifyControl(pb.is_playing ? 'pause' : 'play'));
+    $('sp-det-next').addEventListener('click',    () => _spotifyControl('next'));
+    $('sp-det-repeat').addEventListener('click',  () => _spotifyControl('repeat', { mode: nextRepeat }));
+
+    // Seek bar
+    const seekBar = $('sp-seek-bar');
+    if (seekBar && _spDurationMs) {
+      seekBar.addEventListener('click', (e) => {
+        const rect = seekBar.getBoundingClientRect();
+        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        const position_ms = Math.floor(ratio * _spDurationMs);
+        _spotifyControl('seek', { position_ms });
+      });
+    }
+
+    // Volume slider with 400ms debounce
+    const volSlider = $('sp-det-vol');
+    if (volSlider) {
+      let volTimer = null;
+      volSlider.addEventListener('input', () => {
+        clearTimeout(volTimer);
+        volTimer = setTimeout(() => _spotifyControl('volume', { volume_percent: parseInt(volSlider.value, 10) }), 400);
+      });
+    }
+
+    // Device transfer
+    document.querySelectorAll('.sp-device-item[data-device-id]').forEach(el => {
+      const deviceId = el.getAttribute('data-device-id');
+      const transfer = () => _spotifyControl('transfer', { device_id: deviceId });
+      el.addEventListener('click', transfer);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); transfer(); }
+      });
+    });
+  }
+
   function renderStorageDetail(data) {
     const disks = data.disks || [];
     let totalUsed = 0, totalSize = 0;
@@ -1472,7 +1721,11 @@
     document.querySelectorAll('[data-module]').forEach(card => {
       const mod = card.getAttribute('data-module');
       if (!MODULES[mod]) return;
-      const go = (e) => { e.preventDefault(); location.hash = '#/' + mod; };
+      const go = (e) => {
+        if (e.target.closest('a, button, input, label')) return;
+        e.preventDefault();
+        location.hash = '#/' + mod;
+      };
       card.addEventListener('click', go);
       card.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') go(e);

@@ -19,7 +19,7 @@ _CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
 _REDIRECT_URI  = os.environ.get("SPOTIFY_REDIRECT_URI", "")
 _TOKEN_FILE = Path("/tmp/spotify_token.json")
 
-_SCOPES       = "user-read-playback-state user-modify-playback-state"
+_SCOPES       = "user-read-playback-state user-modify-playback-state user-read-recently-played"
 _AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 _TOKEN_URL     = "https://accounts.spotify.com/api/token"
 _API_BASE      = "https://api.spotify.com/v1"
@@ -34,6 +34,11 @@ _token_expiry  = 0.0   # unix timestamp when the access token expires
 _poll_lock   = threading.Lock()
 _poll_result = None
 _POLL_SEC    = 5
+
+# ── Detail poll state ───────────────────────────────────────────────────────────
+_detail_lock   = threading.Lock()
+_detail_result = None
+_DETAIL_POLL_SEC = 15
 
 # ── OAuth CSRF state ────────────────────────────────────────────────────────────
 _oauth_state         = ""
@@ -220,6 +225,41 @@ def _api_post(path: str, body=None) -> int:
         return 0
 
 
+# ── Image + track helpers ───────────────────────────────────────────────────────
+
+def _pick_image(images: list) -> str:
+    """Pick a reasonably-sized image URL from a Spotify images list (prefer width >= 100, else last)."""
+    if not images:
+        return ""
+    for img in reversed(images):
+        if (img.get("width") or 0) >= 100:
+            return img.get("url", "")
+    return images[-1].get("url", "")
+
+
+def _fmt_track(item: dict) -> dict:
+    """Format a Spotify track or episode item into a standardised dict."""
+    item_type = item.get("type", "track")
+    if item_type == "episode":
+        name    = item.get("name", "")
+        artist  = (item.get("show") or {}).get("name", "")
+        album   = ""
+        images  = (item.get("show") or {}).get("images") or []
+    else:
+        name    = item.get("name", "")
+        artist  = ", ".join(a.get("name", "") for a in (item.get("artists") or []))
+        album   = (item.get("album") or {}).get("name", "")
+        images  = (item.get("album") or {}).get("images") or []
+    return {
+        "name":        name,
+        "artist":      artist,
+        "album":       album,
+        "duration_ms": item.get("duration_ms") or 0,
+        "art_url":     _pick_image(images),
+        "type":        item_type,
+    }
+
+
 # ── Playback state ─────────────────────────────────────────────────────────────
 
 def _fetch_playback() -> dict:
@@ -250,14 +290,7 @@ def _fetch_playback() -> dict:
         album  = (item.get("album") or {}).get("name", "")
         images = (item.get("album") or {}).get("images") or []
 
-    # Pick a reasonably-sized image; Spotify returns images largest-first
-    art_url = ""
-    for img in reversed(images):
-        if (img.get("width") or 0) >= 100:
-            art_url = img.get("url", "")
-            break
-    if not art_url and images:
-        art_url = images[-1].get("url", "")
+    art_url = _pick_image(images)
 
     device = data.get("device") or {}
 
@@ -277,6 +310,7 @@ def _fetch_playback() -> dict:
         "volume":        device.get("volume_percent"),
         "device_name":   device.get("name", ""),
         "item_type":     item_type,
+        "context":       data.get("context"),
     }
 
 
@@ -308,6 +342,112 @@ def get_playback():
     return dict(result)
 
 
+# ── Detail data ─────────────────────────────────────────────────────────────────
+
+def _fetch_detail() -> dict:
+    """Fetch queue, recently played, devices and context info."""
+    # Queue
+    queue = []
+    status, data = _api_get("/me/player/queue")
+    if status == 200 and data:
+        for item in (data.get("queue") or [])[:15]:
+            queue.append(_fmt_track(item))
+
+    # Recently played
+    recently_played = []
+    recent_scope_missing = False
+    status, data = _api_get("/me/player/recently-played?limit=15")
+    if status == 403:
+        recent_scope_missing = True
+    elif status == 200 and data:
+        for history_item in (data.get("items") or []):
+            track_data = history_item.get("track") or {}
+            if not track_data:
+                continue
+            fmt = _fmt_track(track_data)
+            fmt["played_at"] = history_item.get("played_at", "")
+            recently_played.append(fmt)
+
+    # Devices
+    devices = []
+    status, data = _api_get("/me/player/devices")
+    if status == 200 and data:
+        for dev in (data.get("devices") or []):
+            devices.append({
+                "id":        dev.get("id", ""),
+                "name":      dev.get("name", ""),
+                "type":      dev.get("type", ""),
+                "is_active": dev.get("is_active", False),
+                "volume":    dev.get("volume_percent"),
+            })
+
+    # Context
+    context = {}
+    status, pb_data = _api_get("/me/player?additional_types=track,episode")
+    if status == 200 and pb_data:
+        raw_ctx = pb_data.get("context") or {}
+        ctx_type = raw_ctx.get("type", "")
+        ctx_uri  = raw_ctx.get("uri", "")
+        if ctx_type and ctx_uri:
+            ctx_id = ctx_uri.split(":")[-1] if ":" in ctx_uri else ""
+            ctx_name  = ""
+            ctx_owner = ""
+            if ctx_type == "playlist" and ctx_id:
+                s2, pdata = _api_get(f"/playlists/{ctx_id}?fields=name,owner(display_name)")
+                if s2 == 200 and pdata:
+                    ctx_name  = pdata.get("name", "")
+                    ctx_owner = (pdata.get("owner") or {}).get("display_name", "")
+            elif ctx_type == "album" and ctx_id:
+                s2, adata = _api_get(f"/albums/{ctx_id}")
+                if s2 == 200 and adata:
+                    ctx_name = adata.get("name", "")
+            elif ctx_type == "artist" and ctx_id:
+                s2, ardata = _api_get(f"/artists/{ctx_id}")
+                if s2 == 200 and ardata:
+                    ctx_name = ardata.get("name", "")
+            context = {"type": ctx_type, "name": ctx_name, "owner": ctx_owner}
+
+    return {
+        "queue":               queue,
+        "recently_played":     recently_played,
+        "recent_scope_missing": recent_scope_missing,
+        "devices":             devices,
+        "context":             context,
+    }
+
+
+def _detail_worker() -> None:
+    global _detail_result
+    while True:
+        try:
+            with _tok_lock:
+                has_token = bool(_refresh_token) or bool(_access_token)
+            if has_token:
+                result = _fetch_detail()
+                with _detail_lock:
+                    _detail_result = result
+        except Exception as exc:
+            log.warning("Spotify detail poll error: %s", exc)
+        time.sleep(_DETAIL_POLL_SEC)
+
+
+def get_detail() -> dict | None:
+    """Return combined playback + detail data, or None if Spotify is not configured."""
+    if not _CLIENT_ID:
+        return None
+    pb = get_playback()
+    with _detail_lock:
+        det = dict(_detail_result) if _detail_result is not None else {}
+    return {
+        "playback":            pb,
+        "queue":               det.get("queue", []),
+        "recently_played":     det.get("recently_played", []),
+        "recent_scope_missing": det.get("recent_scope_missing", False),
+        "devices":             det.get("devices", []),
+        "context":             det.get("context", {}),
+    }
+
+
 def spotify_action(action: str, **kwargs) -> dict:
     """Perform a Spotify playback action. Returns {"ok": bool, "error": str|None}."""
     token = _valid_token()
@@ -337,6 +477,11 @@ def spotify_action(action: str, **kwargs) -> dict:
         elif action == "seek":
             pos = max(0, int(kwargs.get("position_ms", 0)))
             code = _api_put(f"/me/player/seek?position_ms={pos}")
+        elif action == "transfer":
+            device_id = str(kwargs.get("device_id", ""))
+            if not device_id:
+                return {"ok": False, "error": "device_id required"}
+            code = _api_put("/me/player", {"device_ids": [device_id], "play": True})
         else:
             return {"ok": False, "error": "unknown action"}
     except Exception as exc:
@@ -361,3 +506,4 @@ def spotify_action(action: str, **kwargs) -> dict:
 if _CLIENT_ID:
     _load_tokens()
     threading.Thread(target=_poll_worker, daemon=True, name="spotify-poller").start()
+    threading.Thread(target=_detail_worker, daemon=True, name="spotify-detail-poller").start()

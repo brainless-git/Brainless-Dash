@@ -16,6 +16,13 @@ STATIC_DIR = Path(__file__).parent / "static"
 REFRESH_MS = int(os.environ.get("REFRESH_MS", "2000"))
 
 
+def _base_url(request: Request) -> str:
+    """Return the public base URL, honouring X-Forwarded-* headers from reverse proxies."""
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host  = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}/"
+
+
 @app.get("/api/config")
 def client_config():
     """Configuration consumed by the frontend at startup."""
@@ -29,7 +36,7 @@ def health():
 
 @app.get("/api/stats")
 def all_stats(request: Request):
-    return JSONResponse(stats.collect_all(str(request.base_url)))
+    return JSONResponse(stats.collect_all(_base_url(request)))
 
 
 @app.get("/api/cpu")
@@ -119,7 +126,7 @@ def minecraft_op_action(action: str, payload: dict = Body(default={})):
 def spotify_auth(request: Request):
     if not spotify._CLIENT_ID:
         return JSONResponse({"error": "SPOTIFY_CLIENT_ID not configured"}, status_code=404)
-    return RedirectResponse(spotify.get_auth_url(str(request.base_url)), status_code=302)
+    return RedirectResponse(spotify.get_auth_url(_base_url(request)), status_code=302)
 
 
 @app.get("/api/spotify/callback")
@@ -141,7 +148,7 @@ def spotify_stats(request: Request):
     if result is None:
         return JSONResponse({"error": "SPOTIFY_CLIENT_ID not configured"}, status_code=404)
     if not result.get("authorized"):
-        result["redirect_uri"] = spotify.get_redirect_uri(str(request.base_url))
+        result["redirect_uri"] = spotify.get_redirect_uri(_base_url(request))
     return result
 
 

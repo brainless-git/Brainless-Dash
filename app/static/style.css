@@ -1282,6 +1282,30 @@ body {
 
 .spotify-auth-btn:hover { background: #1ed760; }
 
+.spotify-auth-uri {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin: 0 0 12px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.spotify-auth-uri a { color: var(--text-dim); }
+.spotify-auth-uri a:hover { color: var(--text); }
+
+.spotify-auth-uri code {
+  display: inline-block;
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 2px;
+  padding: 2px 6px;
+  color: var(--accent);
+  word-break: break-all;
+}
+
 /* Tablet and up */
 @media (min-width: 700px) {
   .content {

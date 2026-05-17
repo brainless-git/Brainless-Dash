@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -28,8 +28,8 @@ def health():
 
 
 @app.get("/api/stats")
-def all_stats():
-    return JSONResponse(stats.collect_all())
+def all_stats(request: Request):
+    return JSONResponse(stats.collect_all(str(request.base_url)))
 
 
 @app.get("/api/cpu")
@@ -116,10 +116,10 @@ def minecraft_op_action(action: str, payload: dict = Body(default={})):
 
 
 @app.get("/api/spotify/auth")
-def spotify_auth():
+def spotify_auth(request: Request):
     if not spotify._CLIENT_ID:
         return JSONResponse({"error": "SPOTIFY_CLIENT_ID not configured"}, status_code=404)
-    return RedirectResponse(spotify.get_auth_url())
+    return RedirectResponse(spotify.get_auth_url(str(request.base_url)), status_code=302)
 
 
 @app.get("/api/spotify/callback")
@@ -136,10 +136,12 @@ def spotify_callback(code: str = None, state: str = None, error: str = None):
 
 
 @app.get("/api/spotify")
-def spotify_stats():
+def spotify_stats(request: Request):
     result = spotify.get_playback()
     if result is None:
         return JSONResponse({"error": "SPOTIFY_CLIENT_ID not configured"}, status_code=404)
+    if not result.get("authorized"):
+        result["redirect_uri"] = spotify.get_redirect_uri(str(request.base_url))
     return result
 
 

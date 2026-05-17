@@ -15,10 +15,8 @@ log = logging.getLogger(__name__)
 
 _CLIENT_ID     = os.environ.get("SPOTIFY_CLIENT_ID", "")
 _CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
-_REDIRECT_URI  = os.environ.get(
-    "SPOTIFY_REDIRECT_URI",
-    "http://localhost:8090/api/spotify/callback",
-)
+# Empty string means "derive from the request host at auth time"
+_REDIRECT_URI  = os.environ.get("SPOTIFY_REDIRECT_URI", "")
 _TOKEN_FILE = Path("/tmp/spotify_token.json")
 
 _SCOPES       = "user-read-playback-state user-modify-playback-state"
@@ -38,7 +36,8 @@ _poll_result = None
 _POLL_SEC    = 5
 
 # ── OAuth CSRF state ────────────────────────────────────────────────────────────
-_oauth_state = ""
+_oauth_state         = ""
+_effective_redirect  = ""   # set when auth URL is generated; reused in exchange_code
 
 
 def _client_b64() -> str:
@@ -106,10 +105,12 @@ def _valid_token() -> str:
 def exchange_code(code: str) -> bool:
     """Exchange an OAuth authorisation code for access + refresh tokens."""
     global _access_token, _refresh_token, _token_expiry
+    # Must use the same redirect_uri that was sent in the authorisation request
+    redirect = _effective_redirect or _REDIRECT_URI
     body = urllib.parse.urlencode({
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": _REDIRECT_URI,
+        "redirect_uri": redirect,
     }).encode()
     req = urllib.request.Request(
         _TOKEN_URL, data=body, method="POST",
@@ -129,17 +130,37 @@ def exchange_code(code: str) -> bool:
     return bool(_access_token)
 
 
-def get_auth_url() -> str:
-    global _oauth_state
+def get_auth_url(base_url: str = "") -> str:
+    """Return the Spotify OAuth URL. base_url is used to derive the redirect URI when
+    SPOTIFY_REDIRECT_URI is not explicitly configured."""
+    global _oauth_state, _effective_redirect
     _oauth_state = secrets.token_urlsafe(16)
+    # If the user explicitly set SPOTIFY_REDIRECT_URI, always use that.
+    # Otherwise derive it from the request's base URL so the callback goes
+    # back to whatever host the browser used to reach the dashboard.
+    if _REDIRECT_URI:
+        _effective_redirect = _REDIRECT_URI
+    elif base_url:
+        _effective_redirect = base_url.rstrip("/") + "/api/spotify/callback"
+    else:
+        _effective_redirect = "http://localhost:8090/api/spotify/callback"
     params = urllib.parse.urlencode({
         "client_id": _CLIENT_ID,
         "response_type": "code",
-        "redirect_uri": _REDIRECT_URI,
+        "redirect_uri": _effective_redirect,
         "scope": _SCOPES,
         "state": _oauth_state,
     })
     return f"{_AUTHORIZE_URL}?{params}"
+
+
+def get_redirect_uri(base_url: str = "") -> str:
+    """Return the redirect URI that will be used for OAuth, for display to the user."""
+    if _REDIRECT_URI:
+        return _REDIRECT_URI
+    if base_url:
+        return base_url.rstrip("/") + "/api/spotify/callback"
+    return "http://localhost:8090/api/spotify/callback"
 
 
 # ── Spotify Web API helpers ─────────────────────────────────────────────────────

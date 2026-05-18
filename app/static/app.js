@@ -398,6 +398,149 @@
     }
   }
 
+  // ── Layout drag-to-reorder ───────────────────────────────────────────────────
+
+  let _layoutUnlocked = false;
+  let _dragState      = null;
+  let _refreshTimer   = null;
+
+  const _LOCK_SVG   = '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="4" y="10" width="12" height="9" rx="1.5"/><path d="M7 10V7.5a3 3 0 016 0V10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  const _UNLOCK_SVG = '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="4" y="10" width="12" height="9" rx="1.5"/><path d="M7 10V7a3 3 0 016 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+
+  function _saveCardOrder() {
+    const ids = Array.from(document.querySelectorAll('.content > .card'))
+      .map(c => c.id).filter(Boolean);
+    try { localStorage.setItem('bd-card-order', JSON.stringify(ids)); } catch (_) {}
+  }
+
+  function _applyCardOrder() {
+    try {
+      const order = JSON.parse(localStorage.getItem('bd-card-order') || '[]');
+      if (!order.length) return;
+      const content = document.querySelector('.content');
+      order.forEach(id => {
+        const card = document.getElementById(id);
+        if (card && card.parentNode === content) content.appendChild(card);
+      });
+    } catch (_) {}
+  }
+
+  function _onDragPointerDown(e) {
+    if (!_layoutUnlocked || _dragState) return;
+    if (e.target.closest('a, button, input, label')) return;
+    e.preventDefault();
+
+    const card    = e.currentTarget;
+    const rect    = card.getBoundingClientRect();
+    const content = document.querySelector('.content');
+
+    // Ghost: fixed-position clone that follows the pointer
+    const ghost = document.createElement('div');
+    ghost.className = 'card card-drag-ghost';
+    ghost.innerHTML = card.innerHTML;
+    ghost.style.width  = rect.width  + 'px';
+    ghost.style.height = rect.height + 'px';
+    ghost.style.left   = rect.left   + 'px';
+    ghost.style.top    = rect.top    + 'px';
+    document.body.appendChild(ghost);
+
+    // Placeholder: empty grid slot marking the drop target
+    const ph = document.createElement('div');
+    ph.className = 'card-drag-placeholder';
+    ph.style.gridColumn = getComputedStyle(card).gridColumn;
+    ph.style.height     = rect.height + 'px';
+    content.insertBefore(ph, card);
+    card.style.display = 'none';
+
+    card.setPointerCapture(e.pointerId);
+    card.addEventListener('pointermove',   _onDragPointerMove);
+    card.addEventListener('pointerup',     _onDragPointerUp);
+    card.addEventListener('pointercancel', _onDragPointerUp);
+
+    clearInterval(_refreshTimer); // pause polling during drag to avoid render() fighting the DOM
+    _dragState = { card, ghost, ph, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+  }
+
+  function _onDragPointerMove(e) {
+    if (!_dragState || _dragState.card !== e.currentTarget) return;
+    const { ghost, ph, offsetX, offsetY } = _dragState;
+
+    ghost.style.left = (e.clientX - offsetX) + 'px';
+    ghost.style.top  = (e.clientY - offsetY) + 'px';
+
+    const content  = document.querySelector('.content');
+    const ghostCX  = e.clientX - offsetX + ghost.offsetWidth  / 2;
+    const ghostCY  = e.clientY - offsetY + ghost.offsetHeight / 2;
+
+    // Find the card whose centre is closest to the ghost centre
+    const cards = Array.from(content.querySelectorAll('.card'))
+      .filter(c => c !== ph && getComputedStyle(c).display !== 'none');
+    let best = null, bestDist = Infinity;
+    for (const c of cards) {
+      const r  = c.getBoundingClientRect();
+      const cx = r.left + r.width  / 2;
+      const cy = r.top  + r.height / 2;
+      const d  = Math.hypot(ghostCX - cx, ghostCY - cy);
+      if (d < bestDist) { bestDist = d; best = c; }
+    }
+    if (!best) return;
+
+    const br  = best.getBoundingClientRect();
+    const bcy = br.top + br.height / 2;
+    const bcx = br.left + br.width  / 2;
+    if (ghostCY < bcy || (Math.abs(ghostCY - bcy) < 20 && ghostCX < bcx)) {
+      content.insertBefore(ph, best);
+    } else {
+      best.after(ph);
+    }
+  }
+
+  function _onDragPointerUp(e) {
+    if (!_dragState || _dragState.card !== e.currentTarget) return;
+    const { card, ghost, ph } = _dragState;
+
+    card.removeEventListener('pointermove',   _onDragPointerMove);
+    card.removeEventListener('pointerup',     _onDragPointerUp);
+    card.removeEventListener('pointercancel', _onDragPointerUp);
+
+    ph.parentNode.insertBefore(card, ph);
+    card.style.display = '';
+    ghost.remove();
+    ph.remove();
+    _dragState = null;
+    _saveCardOrder();
+
+    _refreshTimer = setInterval(() => { if (currentModule) renderDetail(); else tick(); }, REFRESH_MS);
+  }
+
+  function _setLayoutLocked() {
+    _layoutUnlocked = false;
+    document.querySelector('.content').classList.remove('layout-unlocked');
+    const btn = $('layout-lock-btn');
+    btn.innerHTML = _LOCK_SVG;
+    btn.setAttribute('aria-pressed', 'false');
+    btn.title = 'Unlock layout to rearrange cards';
+    btn.classList.remove('unlocked');
+    document.querySelectorAll('.content > .card').forEach(c => {
+      c.removeEventListener('pointerdown', _onDragPointerDown);
+    });
+    _saveCardOrder();
+  }
+
+  function _setLayoutUnlocked() {
+    _layoutUnlocked = true;
+    document.querySelector('.content').classList.add('layout-unlocked');
+    const btn = $('layout-lock-btn');
+    btn.innerHTML = _UNLOCK_SVG;
+    btn.setAttribute('aria-pressed', 'true');
+    btn.title = 'Lock layout';
+    btn.classList.add('unlocked');
+    document.querySelectorAll('.content > .card').forEach(c => {
+      c.removeEventListener('pointerdown', _onDragPointerDown);
+      c.addEventListener('pointerdown', _onDragPointerDown);
+    });
+  }
+
   // ── Sonarr change detection ──────────────────────────────────────────────────
 
   let _sonarrHash = '';
@@ -1722,6 +1865,7 @@
       const mod = card.getAttribute('data-module');
       if (!MODULES[mod]) return;
       const go = (e) => {
+        if (_layoutUnlocked) return;
         if (e.target.closest('a, button, input, label')) return;
         e.preventDefault();
         location.hash = '#/' + mod;
@@ -1734,10 +1878,14 @@
   }
 
   async function init() {
+    _applyCardOrder();
     attachModuleClicks();
     window.addEventListener('hashchange', () => {
       applyRoute();
       if (currentModule) renderDetail();
+    });
+    $('layout-lock-btn').addEventListener('click', () => {
+      if (_layoutUnlocked) _setLayoutLocked(); else _setLayoutUnlocked();
     });
     try {
       const r = await fetch('/api/config', { cache: 'no-store' });
@@ -1748,7 +1896,7 @@
     } catch (e) { /* use default */ }
     applyRoute();
     tick();
-    setInterval(() => {
+    _refreshTimer = setInterval(() => {
       if (currentModule) renderDetail();
       else tick();
     }, REFRESH_MS);

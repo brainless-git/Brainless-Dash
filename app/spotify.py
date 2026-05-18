@@ -17,7 +17,7 @@ _CLIENT_ID     = os.environ.get("SPOTIFY_CLIENT_ID", "")
 _CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
 # Empty string means "derive from the request host at auth time"
 _REDIRECT_URI  = os.environ.get("SPOTIFY_REDIRECT_URI", "")
-_TOKEN_FILE = Path("/tmp/spotify_token.json")
+_TOKEN_FILE = Path(os.environ.get("SPOTIFY_TOKEN_FILE", "/tmp/spotify_token.json"))
 
 _SCOPES       = "user-read-playback-state user-modify-playback-state user-read-recently-played"
 _AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
@@ -350,7 +350,7 @@ def _fetch_detail() -> dict:
     queue = []
     status, data = _api_get("/me/player/queue")
     if status == 200 and data:
-        for item in (data.get("queue") or [])[:15]:
+        for item in (data.get("queue") or [])[:5]:
             queue.append(_fmt_track(item))
 
     # Recently played

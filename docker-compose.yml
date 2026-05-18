@@ -14,7 +14,7 @@ services:
       - /sys:/sys:ro
       - /proc:/proc:ro
       - /mnt:/mnt:ro
-      - /mnt/user/appdata/brainless-dash/certs:/data/certs
+      - /mnt/user/appdata/brainless-dash:/data
     environment:
       - TZ=Australia/Sydney
       - PORT=8090
@@ -47,6 +47,7 @@ services:
       - SPOTIFY_CLIENT_ID=
       - SPOTIFY_CLIENT_SECRET=
       - SPOTIFY_REDIRECT_URI=
+      - SPOTIFY_TOKEN_FILE=/data/spotify_token.json
       # Manual cert paths (skip if using ACME_DOMAIN below)
       - HTTPS_CERT=
       - HTTPS_KEY=

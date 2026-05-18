@@ -1617,3 +1617,86 @@ body {
   color: var(--text);
   font-weight: 500;
 }
+
+/* ── Weather detail — 7-day forecast ─────────────────────────────────────── */
+.wx-forecast-grid {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.wx-forecast-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 64px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 6px;
+  flex-shrink: 0;
+}
+.wx-forecast-name {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.wx-forecast-icon { line-height: 0; }
+.wx-forecast-icon .wx-icon { width: 32px; height: 32px; }
+.wx-forecast-hi {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.wx-forecast-lo {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.wx-forecast-precip {
+  font-size: 11px;
+  color: #60a5fa;
+  min-height: 16px;
+}
+.wx-forecast-wind {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+/* ── Weather detail — marine conditions ─────────────────────────────────── */
+.marine-day { margin-bottom: 16px; }
+.marine-day:last-child { margin-bottom: 0; }
+.marine-day-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.marine-header,
+.marine-row {
+  display: grid;
+  grid-template-columns: 48px 1fr 1fr 36px 52px;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.marine-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  border-bottom-color: var(--border);
+}
+.marine-time { color: var(--text-dim); }
+.marine-wave { font-weight: 500; color: var(--text); }
+.marine-swell { color: var(--text-dim); }
+.marine-dir { color: var(--text-dim); }
+.marine-period { color: var(--text-dim); }

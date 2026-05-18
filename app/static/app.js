@@ -431,6 +431,11 @@
     return fn(isDay);
   }
 
+  function _windDir(deg) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[Math.round((deg || 0) / 45) % 8];
+  }
+
   function renderWeather(data) {
     const card = $('card-weather');
     if (!data || !data.available) {
@@ -504,6 +509,87 @@
       },
       { timeout: 10000, maximumAge: 300000 }
     );
+  }
+
+  // ── Weather detail ──────────────────────────────────────────────────────────
+
+  function renderWeatherDetail(data) {
+    if (!data || !data.available) {
+      $('detail-body').innerHTML = '<div class="detail-section"><div class="empty">Weather unavailable</div></div>';
+      $('detail-meta').textContent = '';
+      return;
+    }
+
+    $('detail-meta').textContent = data.location || '';
+
+    const u  = data.temp_unit || '°C';
+    const wu = data.wind_unit || 'km/h';
+
+    // 7-day forecast strip
+    let forecastHtml = '';
+    if (data.forecast && data.forecast.length) {
+      const days = data.forecast.map(day => {
+        const dt      = new Date(day.date + 'T12:00:00');
+        const dayName = dt.toLocaleDateString('en-AU', { weekday: 'short' });
+        const hi      = day.high  != null ? Math.round(day.high)  + esc(u) : '—';
+        const lo      = day.low   != null ? Math.round(day.low)   + esc(u) : '—';
+        const precip  = day.precip_pct != null ? day.precip_pct + '%' : '';
+        const windStr = day.wind_max != null
+          ? Math.round(day.wind_max) + ' ' + esc(wu) + (day.wind_dir != null ? ' ' + _windDir(day.wind_dir) : '')
+          : '';
+        return '<div class="wx-forecast-day">' +
+          '<div class="wx-forecast-name">' + esc(dayName) + '</div>' +
+          '<div class="wx-forecast-icon">' + _wxIcon(day.icon, true) + '</div>' +
+          '<div class="wx-forecast-hi">' + hi + '</div>' +
+          '<div class="wx-forecast-lo">' + lo + '</div>' +
+          (precip  ? '<div class="wx-forecast-precip">' + esc(precip) + '</div>' : '<div class="wx-forecast-precip"></div>') +
+          (windStr ? '<div class="wx-forecast-wind">' + windStr + '</div>' : '') +
+          '</div>';
+      }).join('');
+      forecastHtml = '<div class="detail-section"><h3>7-day Forecast</h3>' +
+        '<div class="wx-forecast-grid">' + days + '</div></div>';
+    }
+
+    // Marine wave/swell section
+    let marineHtml = '';
+    if (data.marine && data.marine.length) {
+      const byDay = {};
+      data.marine.forEach(h => {
+        const d = h.time.substring(0, 10);
+        if (!byDay[d]) byDay[d] = [];
+        byDay[d].push(h);
+      });
+
+      const dayBlocks = Object.entries(byDay).map(([date, hours]) => {
+        const dt       = new Date(date + 'T12:00:00');
+        const dayLabel = dt.toLocaleDateString('en-AU', { weekday: 'long', month: 'short', day: 'numeric' });
+        // Sample every 3 hours
+        const rows = hours.filter((_, i) => i % 3 === 0).map(h => {
+          const time   = h.time.substring(11, 16);
+          const wave   = h.wave_height   != null ? h.wave_height.toFixed(1)   + ' m' : '—';
+          const swell  = h.swell_height  != null ? h.swell_height.toFixed(1)  + ' m' : '—';
+          const dir    = h.swell_dir     != null ? _windDir(h.swell_dir)              : '—';
+          const period = h.swell_period  != null ? h.swell_period.toFixed(0)  + ' s' : '—';
+          return '<div class="marine-row">' +
+            '<span class="marine-time">'   + esc(time)   + '</span>' +
+            '<span class="marine-wave">'   + esc(wave)   + '</span>' +
+            '<span class="marine-swell">'  + esc(swell)  + '</span>' +
+            '<span class="marine-dir">'    + esc(dir)    + '</span>' +
+            '<span class="marine-period">' + esc(period) + '</span>' +
+            '</div>';
+        }).join('');
+        return '<div class="marine-day">' +
+          '<div class="marine-day-label">' + esc(dayLabel) + '</div>' +
+          '<div class="marine-header">' +
+            '<span>Time</span><span>Wave</span><span>Swell</span><span>Dir</span><span>Period</span>' +
+          '</div>' + rows + '</div>';
+      }).join('');
+
+      marineHtml = '<div class="detail-section"><h3>Marine Conditions</h3>' +
+        dayBlocks + '</div>';
+    }
+
+    $('detail-body').innerHTML = forecastHtml + marineHtml;
   }
 
   // ── Layout drag-to-reorder ───────────────────────────────────────────────────
@@ -1013,6 +1099,7 @@
     network:     { title: 'Network',       endpoint: '/api/network',        render: renderNetworkDetail },
     storage:     { title: 'Storage',       endpoint: '/api/storage',        render: renderStorageDetail },
     spotify:     { title: 'Spotify',       endpoint: '/api/spotify/detail', render: renderSpotifyDetail },
+    weather:     { title: 'Weather',       endpoint: () => _weatherCoords ? `/api/weather/detail?lat=${_weatherCoords.lat}&lon=${_weatherCoords.lon}` : null, render: renderWeatherDetail },
   };
 
   let currentModule = null;
@@ -1028,7 +1115,13 @@
     $('detail-title').textContent = mod.title;
     const savedScroll = window.scrollY;
     try {
-      const r = await fetch(mod.endpoint, { cache: 'no-store' });
+      const url = typeof mod.endpoint === 'function' ? mod.endpoint() : mod.endpoint;
+      if (!url) {
+        $('detail-body').innerHTML = '<div class="empty">Location not available yet</div>';
+        $('detail-meta').textContent = '';
+        return;
+      }
+      const r = await fetch(url, { cache: 'no-store' });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const data = await r.json();
       mod.render(data);

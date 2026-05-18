@@ -1326,3 +1326,104 @@ def get_weather(lat: float, lon: float) -> dict:
     with _weather_lock:
         _weather_cache[key] = (time.time(), result)
     return result
+
+
+_weather_detail_cache: dict = {}
+_WEATHER_DETAIL_TTL = 1800  # 30 minutes
+
+
+def get_weather_detail(lat: float, lon: float) -> dict:
+    key = (round(lat, 2), round(lon, 2))
+    now = time.time()
+    with _weather_lock:
+        if key in _weather_detail_cache:
+            ts, data = _weather_detail_cache[key]
+            if now - ts < _WEATHER_DETAIL_TTL:
+                return data
+
+    temp_unit = "fahrenheit" if _WEATHER_UNITS == "imperial" else "celsius"
+    wind_unit = "mph"        if _WEATHER_UNITS == "imperial" else "kmh"
+
+    # 7-day forecast
+    forecast: list = []
+    forecast_url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        f"&daily=temperature_2m_max,temperature_2m_min,weather_code,"
+        f"precipitation_probability_max,wind_speed_10m_max,wind_direction_10m_dominant"
+        f"&temperature_unit={temp_unit}&wind_speed_unit={wind_unit}"
+        f"&timezone=auto&forecast_days=7"
+    )
+    try:
+        req = urllib.request.Request(forecast_url, headers={"User-Agent": "brainless-dash/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = json.loads(resp.read())
+        daily = raw.get("daily", {})
+
+        def _d(key2: str, i: int):
+            lst = daily.get(key2) or []
+            return lst[i] if i < len(lst) else None
+
+        for i, d in enumerate(daily.get("time") or []):
+            code = _d("weather_code", i) or 0
+            forecast.append({
+                "date":       d,
+                "high":       _d("temperature_2m_max", i),
+                "low":        _d("temperature_2m_min", i),
+                "code":       code,
+                "condition":  _wmo_description(code),
+                "icon":       _wmo_icon(code),
+                "precip_pct": _d("precipitation_probability_max", i),
+                "wind_max":   _d("wind_speed_10m_max", i),
+                "wind_dir":   _d("wind_direction_10m_dominant", i),
+            })
+    except Exception as exc:
+        log.debug("Weather forecast fetch failed: %s", exc)
+
+    # Marine wave/swell — gracefully empty for inland locations
+    marine: list = []
+    try:
+        marine_url = (
+            f"https://marine-api.open-meteo.com/v1/marine"
+            f"?latitude={lat}&longitude={lon}"
+            f"&hourly=wave_height,swell_wave_height,swell_wave_direction,swell_wave_period"
+            f"&forecast_days=2&timezone=auto"
+        )
+        req = urllib.request.Request(marine_url, headers={"User-Agent": "brainless-dash/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            mraw = json.loads(resp.read())
+        hourly = mraw.get("hourly", {})
+        times      = hourly.get("time", [])
+        wave_h     = hourly.get("wave_height", [])
+        swell_h    = hourly.get("swell_wave_height", [])
+        swell_dir  = hourly.get("swell_wave_direction", [])
+        swell_per  = hourly.get("swell_wave_period", [])
+
+        def _m(lst: list, i: int):
+            return lst[i] if i < len(lst) else None
+
+        for i, t in enumerate(times[:48]):
+            marine.append({
+                "time":         t,
+                "wave_height":  _m(wave_h, i),
+                "swell_height": _m(swell_h, i),
+                "swell_dir":    _m(swell_dir, i),
+                "swell_period": _m(swell_per, i),
+            })
+        # Discard entirely if no non-zero wave data (inland location)
+        if not any(e["wave_height"] for e in marine):
+            marine = []
+    except Exception as exc:
+        log.debug("Marine fetch failed: %s", exc)
+
+    result = {
+        "available": True,
+        "forecast":  forecast,
+        "marine":    marine,
+        "temp_unit": "°F" if _WEATHER_UNITS == "imperial" else "°C",
+        "wind_unit": "mph" if _WEATHER_UNITS == "imperial" else "km/h",
+        "location":  _weather_location(lat, lon),
+    }
+    with _weather_lock:
+        _weather_detail_cache[key] = (time.time(), result)
+    return result

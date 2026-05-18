@@ -1703,21 +1703,37 @@ body {
 
 /* Mobile tweaks for weather detail */
 @media (max-width: 480px) {
+  /* Dashboard card — shrink icon and temperature */
+  .wx-main { gap: 10px; margin-bottom: 8px; }
+  .wx-icon { width: 36px; height: 36px; }
+  .wx-temp { font-size: 26px; }
+  .wx-condition { font-size: 12px; }
+  .wx-details { gap: 8px 14px; padding-top: 8px; }
+  .wx-detail-val { font-size: 12px; }
+
+  /* Detail view — tighter section padding */
+  .detail-section { padding: 10px; }
+
+  /* Forecast strip */
   .wx-forecast-day {
-    min-width: 52px;
-    padding: 6px 4px;
+    min-width: 46px;
+    padding: 5px 3px;
     gap: 2px;
+    border-radius: 6px;
   }
-  .wx-forecast-icon .wx-icon { width: 24px; height: 24px; }
+  .wx-forecast-icon .wx-icon { width: 22px; height: 22px; }
   .wx-forecast-name { font-size: 10px; }
   .wx-forecast-hi { font-size: 12px; }
-  .wx-forecast-lo { font-size: 11px; }
-  .wx-forecast-precip { font-size: 10px; }
+  .wx-forecast-lo { font-size: 10px; }
+  .wx-forecast-precip { font-size: 10px; min-height: 14px; }
   .wx-forecast-wind { display: none; }
+
+  /* Marine table */
   .marine-header,
   .marine-row {
-    grid-template-columns: 40px 1fr 1fr 32px 44px;
+    grid-template-columns: 38px 1fr 1fr 30px 42px;
     font-size: 11px;
   }
   .marine-header { font-size: 9px; }
+  .marine-day-label { font-size: 11px; }
 }

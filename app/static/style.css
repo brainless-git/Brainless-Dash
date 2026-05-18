@@ -1700,3 +1700,24 @@ body {
 .marine-swell { color: var(--text-dim); }
 .marine-dir { color: var(--text-dim); }
 .marine-period { color: var(--text-dim); }
+
+/* Mobile tweaks for weather detail */
+@media (max-width: 480px) {
+  .wx-forecast-day {
+    min-width: 52px;
+    padding: 6px 4px;
+    gap: 2px;
+  }
+  .wx-forecast-icon .wx-icon { width: 24px; height: 24px; }
+  .wx-forecast-name { font-size: 10px; }
+  .wx-forecast-hi { font-size: 12px; }
+  .wx-forecast-lo { font-size: 11px; }
+  .wx-forecast-precip { font-size: 10px; }
+  .wx-forecast-wind { display: none; }
+  .marine-header,
+  .marine-row {
+    grid-template-columns: 40px 1fr 1fr 32px 44px;
+    font-size: 11px;
+  }
+  .marine-header { font-size: 9px; }
+}

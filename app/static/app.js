@@ -491,7 +491,7 @@
     const fetchWeather = () => {
       if (!_weatherCoords) return;
       const { lat, lon } = _weatherCoords;
-      fetch('/api/weather?lat=' + lat + '&lon=' + lon, { cache: 'no-store' })
+      fetch('/api/weather?lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lon), { cache: 'no-store' })
         .then(r => r.ok ? r.json() : Promise.reject('HTTP ' + r.status))
         .then(data => renderWeather(data))
         .catch(e => console.error('Weather fetch failed:', e));
@@ -1099,7 +1099,7 @@
     network:     { title: 'Network',       endpoint: '/api/network',        render: renderNetworkDetail },
     storage:     { title: 'Storage',       endpoint: '/api/storage',        render: renderStorageDetail },
     spotify:     { title: 'Spotify',       endpoint: '/api/spotify/detail', render: renderSpotifyDetail },
-    weather:     { title: 'Weather',       endpoint: () => _weatherCoords ? `/api/weather/detail?lat=${_weatherCoords.lat}&lon=${_weatherCoords.lon}` : null, render: renderWeatherDetail },
+    weather:     { title: 'Weather',       endpoint: () => _weatherCoords ? `/api/weather/detail?lat=${encodeURIComponent(_weatherCoords.lat)}&lon=${encodeURIComponent(_weatherCoords.lon)}` : null, render: renderWeatherDetail },
   };
 
   let currentModule = null;

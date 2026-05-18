@@ -54,6 +54,7 @@ def _save_tokens() -> None:
         data = {"access_token": _access_token, "refresh_token": _refresh_token, "expiry": _token_expiry}
     try:
         _TOKEN_FILE.write_text(json.dumps(data))
+        _TOKEN_FILE.chmod(0o600)  # restrict to owner only — token is sensitive
     except OSError as exc:
         log.debug("Could not save Spotify tokens: %s", exc)
 

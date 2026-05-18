@@ -131,7 +131,8 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 |----------|---------|-------------|
 | `SPOTIFY_CLIENT_ID` | (unset) | Spotify app Client ID. Set this to enable the playback card. Create an app at the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and add `http://<host>:<port>/api/spotify/callback` as a Redirect URI. |
 | `SPOTIFY_CLIENT_SECRET` | (unset) | Spotify app Client Secret. |
-| `SPOTIFY_REDIRECT_URI` | `http://localhost:8090/api/spotify/callback` | OAuth callback URI. Must match the Redirect URI registered in the Spotify app settings exactly. |
+| `SPOTIFY_REDIRECT_URI` | (unset) | OAuth callback URI. Must match the Redirect URI registered in your Spotify app exactly. Defaults to the request host when empty, which works for most setups. |
+| `SPOTIFY_TOKEN_FILE` | `/tmp/spotify_token.json` | Path inside the container where the OAuth token is persisted. Set to a path inside a mounted volume (e.g. `/data/spotify_token.json`) so you do not need to re-authorise after a container restart. |
 
 Once the env vars are set, open the dashboard and click **Connect Spotify** on the card. You will be redirected to Spotify to authorise access. After authorising, the card shows the currently playing track with play, pause, skip, shuffle, and repeat controls.
 
@@ -161,9 +162,9 @@ Once the env vars are set, open the dashboard and click **Connect Spotify** on t
 | `/sys` | `/sys` | ro | Hardware temperature sensors via hwmon |
 | `/proc` | `/proc` | ro | CPU, memory, network counters, load averages |
 | `/mnt` | `/mnt` | ro | Unraid array disks, cache pools for capacity reporting |
-| `/data/certs` | e.g. `/mnt/user/appdata/brainless-dash/certs` | rw | ACME certificate storage (required for Let's Encrypt) |
+| `/data` | e.g. `/mnt/user/appdata/brainless-dash` | rw | Persistent app data. ACME certs are stored at `/data/certs`; the Spotify token is stored at `/data/spotify_token.json`. |
 
-The `/data/certs` mount is only needed if you use ACME or manual cert files.
+The `/data` mount is optional but recommended. Without it, ACME certs and the Spotify token are lost on every container restart.
 
 ---
 

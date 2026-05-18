@@ -52,6 +52,7 @@ ENV PORT=8090 \
     SPOTIFY_CLIENT_ID= \
     SPOTIFY_CLIENT_SECRET= \
     SPOTIFY_REDIRECT_URI= \
+    SPOTIFY_TOKEN_FILE=/tmp/spotify_token.json \
     HTTPS_CERT= \
     HTTPS_KEY= \
     ACME_DOMAIN= \

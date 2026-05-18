@@ -430,11 +430,23 @@
     if (e.target.closest('a, button, input, label')) return;
     e.preventDefault();
 
-    const card    = e.currentTarget;
+    const card = e.currentTarget;
+    card.setPointerCapture(e.pointerId);
+    card.addEventListener('pointermove',   _onDragPointerMove);
+    card.addEventListener('pointerup',     _onDragPointerUp);
+    card.addEventListener('pointercancel', _onDragPointerUp);
+
+    // Store start position; ghost/placeholder are created only after threshold
+    _dragState = { card, ghost: null, ph: null, active: false,
+                   startX: e.clientX, startY: e.clientY,
+                   offsetX: 0, offsetY: 0 };
+  }
+
+  function _activateDrag(e) {
+    const { card } = _dragState;
     const rect    = card.getBoundingClientRect();
     const content = document.querySelector('.content');
 
-    // Ghost: fixed-position clone that follows the pointer
     const ghost = document.createElement('div');
     ghost.className = 'card card-drag-ghost';
     ghost.innerHTML = card.innerHTML;
@@ -444,7 +456,6 @@
     ghost.style.top    = rect.top    + 'px';
     document.body.appendChild(ghost);
 
-    // Placeholder: empty grid slot marking the drop target
     const ph = document.createElement('div');
     ph.className = 'card-drag-placeholder';
     ph.style.gridColumn = getComputedStyle(card).gridColumn;
@@ -452,19 +463,25 @@
     content.insertBefore(ph, card);
     card.style.display = 'none';
 
-    card.setPointerCapture(e.pointerId);
-    card.addEventListener('pointermove',   _onDragPointerMove);
-    card.addEventListener('pointerup',     _onDragPointerUp);
-    card.addEventListener('pointercancel', _onDragPointerUp);
+    clearInterval(_refreshTimer);
 
-    clearInterval(_refreshTimer); // pause polling during drag to avoid render() fighting the DOM
-    _dragState = { card, ghost, ph, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+    _dragState.ghost   = ghost;
+    _dragState.ph      = ph;
+    _dragState.active  = true;
+    _dragState.offsetX = _dragState.startX - rect.left;
+    _dragState.offsetY = _dragState.startY - rect.top;
   }
 
   function _onDragPointerMove(e) {
     if (!_dragState || _dragState.card !== e.currentTarget) return;
-    const { ghost, ph, offsetX, offsetY } = _dragState;
 
+    if (!_dragState.active) {
+      // Only activate once the pointer has moved far enough to be intentional
+      if (Math.hypot(e.clientX - _dragState.startX, e.clientY - _dragState.startY) < 8) return;
+      _activateDrag(e);
+    }
+
+    const { ghost, ph, offsetX, offsetY } = _dragState;
     ghost.style.left = (e.clientX - offsetX) + 'px';
     ghost.style.top  = (e.clientY - offsetY) + 'px';
 
@@ -485,32 +502,36 @@
     }
     if (!best) return;
 
-    const br  = best.getBoundingClientRect();
-    const bcy = br.top + br.height / 2;
-    const bcx = br.left + br.width  / 2;
-    if (ghostCY < bcy || (Math.abs(ghostCY - bcy) < 20 && ghostCX < bcx)) {
-      content.insertBefore(ph, best);
-    } else {
-      best.after(ph);
+    const br   = best.getBoundingClientRect();
+    const bcy  = br.top  + br.height / 2;
+    const bcx  = br.left + br.width  / 2;
+    // 12px dead zone prevents jitter near the midpoint
+    const before = ghostCY < bcy - 12 || (Math.abs(ghostCY - bcy) <= 12 && ghostCX < bcx);
+    if (before) {
+      if (ph.nextSibling !== best) content.insertBefore(ph, best);
+    } else if (ghostCY > bcy + 12) {
+      if (best.nextSibling !== ph) best.after(ph);
     }
   }
 
   function _onDragPointerUp(e) {
     if (!_dragState || _dragState.card !== e.currentTarget) return;
-    const { card, ghost, ph } = _dragState;
+    const { card, ghost, ph, active } = _dragState;
 
     card.removeEventListener('pointermove',   _onDragPointerMove);
     card.removeEventListener('pointerup',     _onDragPointerUp);
     card.removeEventListener('pointercancel', _onDragPointerUp);
 
-    ph.parentNode.insertBefore(card, ph);
-    card.style.display = '';
-    ghost.remove();
-    ph.remove();
-    _dragState = null;
-    _saveCardOrder();
+    if (active) {
+      ph.parentNode.insertBefore(card, ph);
+      card.style.display = '';
+      ghost.remove();
+      ph.remove();
+      _saveCardOrder();
+      _refreshTimer = setInterval(() => { if (currentModule) renderDetail(); else tick(); }, REFRESH_MS);
+    }
 
-    _refreshTimer = setInterval(() => { if (currentModule) renderDetail(); else tick(); }, REFRESH_MS);
+    _dragState = null;
   }
 
   function _setLayoutLocked() {

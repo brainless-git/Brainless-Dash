@@ -136,6 +136,16 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 
 Once the env vars are set, open the dashboard and click **Connect Spotify** on the card. You will be redirected to Spotify to authorise access. After authorising, the card shows the currently playing track with play, pause, skip, shuffle, and repeat controls.
 
+### Weather
+
+The weather card uses the viewer's browser geolocation — no API key required. The backend proxies requests to [Open-Meteo](https://open-meteo.com/) (free, no account needed) and caches results for 10 minutes. Location names are resolved via Nominatim reverse geocoding and cached for 24 hours.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WEATHER_UNITS` | `metric` | Temperature and wind speed units: `metric` (°C, km/h) or `imperial` (°F, mph). |
+
+The card appears automatically once the browser grants location permission.
+
 ### HTTPS — manual certificates
 
 | Variable | Default | Description |

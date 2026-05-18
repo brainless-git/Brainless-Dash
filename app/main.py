@@ -166,5 +166,10 @@ def spotify_action(action: str, payload: dict = Body(default={})):
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
+@app.get("/api/weather")
+def weather_stats(lat: float, lon: float):
+    return stats.get_weather(lat, lon)
+
+
 # Serve static frontend from root
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

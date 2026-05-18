@@ -398,6 +398,114 @@
     }
   }
 
+  // ── Weather ──────────────────────────────────────────────────────────────────
+
+  let _weatherCoords = null; // {lat, lon} once geolocation is granted
+
+  const _WEATHER_ICONS = {
+    'clear': (day) => day
+      ? `<svg class="wx-icon" viewBox="0 0 48 48"><circle cx="24" cy="24" r="9" fill="#fbbf24"/><g stroke="#fbbf24" stroke-width="3" stroke-linecap="round"><line x1="24" y1="5" x2="24" y2="11"/><line x1="24" y1="37" x2="24" y2="43"/><line x1="5" y1="24" x2="11" y2="24"/><line x1="37" y1="24" x2="43" y2="24"/><line x1="9.4" y1="9.4" x2="13.7" y2="13.7"/><line x1="34.3" y1="34.3" x2="38.6" y2="38.6"/><line x1="38.6" y1="9.4" x2="34.3" y2="13.7"/><line x1="13.7" y1="34.3" x2="9.4" y2="38.6"/></g></svg>`
+      : `<svg class="wx-icon" viewBox="0 0 48 48"><path d="M24 8a16 16 0 000 32 16 16 0 000-32zm0 4a12 12 0 010 24 12 12 0 010-24z" fill="#c7d2fe" opacity=".4"/><path d="M32 24a8 8 0 11-16 0 8 8 0 0116 0z" fill="#e2e8f0"/></svg>`,
+    'partly-cloudy': () =>
+      `<svg class="wx-icon" viewBox="0 0 48 48"><circle cx="18" cy="20" r="7" fill="#fbbf24"/><path d="M34 22h-.8a9 9 0 00-18 0H14a7 7 0 000 14h20a5 5 0 000-10z" fill="#e2e8f0"/></svg>`,
+    'cloudy': () =>
+      `<svg class="wx-icon" viewBox="0 0 48 48"><path d="M36 20h-.8a11 11 0 00-22 0H12a9 9 0 000 18h24a6 6 0 000-12z" fill="#94a3b8"/></svg>`,
+    'fog': () =>
+      `<svg class="wx-icon" viewBox="0 0 48 48" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"><line x1="8" y1="18" x2="40" y2="18"/><line x1="8" y1="24" x2="40" y2="24"/><line x1="8" y1="30" x2="32" y2="30"/><line x1="8" y1="36" x2="26" y2="36"/></svg>`,
+    'drizzle': () =>
+      `<svg class="wx-icon" viewBox="0 0 48 48"><path d="M34 18h-.8a9 9 0 00-18 0H14a7 7 0 000 14h20a5 5 0 000-10z" fill="#94a3b8"/><g stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="36" x2="16" y2="40"/><line x1="24" y1="36" x2="22" y2="40"/><line x1="30" y1="36" x2="28" y2="40"/></g></svg>`,
+    'rain': () =>
+      `<svg class="wx-icon" viewBox="0 0 48 48"><path d="M34 16h-.8a9 9 0 00-18 0H14a7 7 0 000 14h20a5 5 0 000-10z" fill="#64748b"/><g stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round"><line x1="17" y1="34" x2="14" y2="42"/><line x1="24" y1="34" x2="21" y2="42"/><line x1="31" y1="34" x2="28" y2="42"/></g></svg>`,
+    'showers': () =>
+      `<svg class="wx-icon" viewBox="0 0 48 48"><path d="M34 16h-.8a9 9 0 00-18 0H14a7 7 0 000 14h20a5 5 0 000-10z" fill="#64748b"/><g stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round"><line x1="17" y1="34" x2="14" y2="42"/><line x1="24" y1="34" x2="21" y2="42"/><line x1="31" y1="34" x2="28" y2="42"/></g></svg>`,
+    'snow': () =>
+      `<svg class="wx-icon" viewBox="0 0 48 48"><path d="M34 16h-.8a9 9 0 00-18 0H14a7 7 0 000 14h20a5 5 0 000-10z" fill="#94a3b8"/><g stroke="#bfdbfe" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="35" x2="18" y2="42"/><line x1="24" y1="35" x2="24" y2="42"/><line x1="30" y1="35" x2="30" y2="42"/><line x1="15" y1="38.5" x2="21" y2="38.5"/><line x1="21" y1="38.5" x2="27" y2="38.5"/><line x1="27" y1="38.5" x2="33" y2="38.5"/></g></svg>`,
+    'snow-showers': () =>
+      `<svg class="wx-icon" viewBox="0 0 48 48"><path d="M34 16h-.8a9 9 0 00-18 0H14a7 7 0 000 14h20a5 5 0 000-10z" fill="#94a3b8"/><g stroke="#bfdbfe" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="35" x2="18" y2="42"/><line x1="24" y1="35" x2="24" y2="42"/><line x1="30" y1="35" x2="30" y2="42"/></g></svg>`,
+    'thunderstorm': () =>
+      `<svg class="wx-icon" viewBox="0 0 48 48"><path d="M34 14h-.8a9 9 0 00-18 0H14a7 7 0 000 14h20a5 5 0 000-10z" fill="#475569"/><polyline points="26,28 21,36 25,36 20,44" fill="none" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  };
+
+  function _wxIcon(icon, isDay) {
+    const fn = _WEATHER_ICONS[icon] || _WEATHER_ICONS['cloudy'];
+    return fn(isDay);
+  }
+
+  function renderWeather(data) {
+    const card = $('card-weather');
+    if (!data || !data.available) {
+      if (data && data.error) {
+        card.style.display = '';
+        $('weather-location').textContent = 'unavailable';
+        $('weather-body').innerHTML = '<div class="empty">Weather unavailable: ' + esc(data.error) + '</div>';
+      }
+      return;
+    }
+    card.style.display = '';
+    $('weather-location').textContent = data.location || '';
+
+    const t  = data.temp  != null ? Math.round(data.temp)  : '—';
+    const fl = data.feels_like != null ? Math.round(data.feels_like) : null;
+    const hi = data.high != null ? Math.round(data.high) : '—';
+    const lo = data.low  != null ? Math.round(data.low)  : '—';
+    const u  = data.temp_unit || '°C';
+    const wu = data.wind_unit || 'km/h';
+
+    const feelsHtml = fl != null && fl !== t
+      ? '<div class="wx-feels">Feels like ' + fl + u + '</div>'
+      : '';
+
+    const detailItems = [
+      '<span class="wx-detail-item"><span class="wx-detail-label">High</span><span class="wx-detail-val">' + hi + u + '</span></span>',
+      '<span class="wx-detail-item"><span class="wx-detail-label">Low</span><span class="wx-detail-val">' + lo + u + '</span></span>',
+      data.humidity != null ? '<span class="wx-detail-item"><span class="wx-detail-label">Humidity</span><span class="wx-detail-val">' + data.humidity + '%</span></span>' : '',
+      data.wind != null ? '<span class="wx-detail-item"><span class="wx-detail-label">Wind</span><span class="wx-detail-val">' + Math.round(data.wind) + ' ' + wu + '</span></span>' : '',
+      data.precip_pct != null ? '<span class="wx-detail-item"><span class="wx-detail-label">Rain</span><span class="wx-detail-val">' + data.precip_pct + '%</span></span>' : '',
+    ].filter(Boolean).join('');
+
+    $('weather-body').innerHTML =
+      '<div class="wx-main">' +
+        '<div class="wx-icon-wrap">' + _wxIcon(data.icon, data.is_day) + '</div>' +
+        '<div class="wx-current">' +
+          '<div class="wx-temp">' + t + u + '</div>' +
+          '<div class="wx-condition">' + esc(data.condition) + '</div>' +
+          feelsHtml +
+        '</div>' +
+      '</div>' +
+      '<div class="wx-details">' + detailItems + '</div>';
+  }
+
+  function _startWeatherPolling() {
+    if (!navigator.geolocation) {
+      $('card-weather').style.display = '';
+      $('weather-location').textContent = 'unavailable';
+      $('weather-body').innerHTML = '<div class="empty">Geolocation not supported by this browser</div>';
+      return;
+    }
+
+    const fetchWeather = () => {
+      if (!_weatherCoords) return;
+      const { lat, lon } = _weatherCoords;
+      fetch('/api/weather?lat=' + lat + '&lon=' + lon, { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : Promise.reject('HTTP ' + r.status))
+        .then(data => renderWeather(data))
+        .catch(e => console.error('Weather fetch failed:', e));
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        _weatherCoords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        fetchWeather();
+        setInterval(fetchWeather, 10 * 60 * 1000); // re-poll every 10 min
+      },
+      (err) => {
+        // Permission denied or unavailable — keep card hidden
+        console.debug('Geolocation denied:', err.message);
+      },
+      { timeout: 10000, maximumAge: 300000 }
+    );
+  }
+
   // ── Layout drag-to-reorder ───────────────────────────────────────────────────
 
   let _layoutUnlocked = false;
@@ -1913,6 +2021,7 @@
     } catch (e) { /* use default */ }
     applyRoute();
     tick();
+    _startWeatherPolling();
     _refreshTimer = setInterval(() => {
       if (currentModule) renderDetail();
       else tick();

@@ -718,8 +718,9 @@ _mc_lock          = threading.Lock()
 _mc_result        = None
 _mc_player_times: dict = {}   # player_name → accumulated seconds seen online
 _mc_count_history: list = []  # rolling player-count samples (one per poll)
-_MC_POLL_INTERVAL = 30
-_MC_HISTORY_MAX   = 240       # 2 hours at 30 s/sample
+_MC_POLL_INTERVAL    = 30
+_MC_HISTORY_MAX      = 240   # 2 hours at 30 s/sample
+_MC_PLAYER_TIMES_MAX = 500   # cap leaderboard to avoid unbounded growth
 
 
 def _mc_varint(n):
@@ -1077,6 +1078,11 @@ def _mc_worker():
 
         if len(_mc_count_history) > _MC_HISTORY_MAX:
             _mc_count_history.pop(0)
+
+        # Keep leaderboard bounded — evict entries with lowest play time
+        if len(_mc_player_times) > _MC_PLAYER_TIMES_MAX:
+            top = sorted(_mc_player_times.items(), key=lambda x: x[1], reverse=True)
+            _mc_player_times = dict(top[:_MC_PLAYER_TIMES_MAX])
 
         leaderboard = sorted(
             [{"name": k, "seconds": v} for k, v in _mc_player_times.items()],

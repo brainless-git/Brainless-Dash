@@ -132,7 +132,18 @@ def exchange_code(code: str) -> bool:
         _refresh_token = data.get("refresh_token", "")
         _token_expiry  = time.time() + data.get("expires_in", 3600) - 30
     _save_tokens()
-    return bool(_access_token)
+    if not _access_token:
+        return False
+    # Immediately refresh the poll cache so the dashboard shows authorised
+    # state as soon as the OAuth redirect lands back on the page.
+    try:
+        result = _fetch_playback()
+        with _poll_lock:
+            global _poll_result
+            _poll_result = result
+    except Exception:
+        pass
+    return True
 
 
 def get_auth_url(base_url: str = "") -> str:

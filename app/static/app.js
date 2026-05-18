@@ -486,30 +486,26 @@
     ghost.style.top  = (e.clientY - offsetY) + 'px';
 
     const content  = document.querySelector('.content');
-    const ghostCX  = e.clientX - offsetX + ghost.offsetWidth  / 2;
     const ghostCY  = e.clientY - offsetY + ghost.offsetHeight / 2;
 
-    // Find the card whose centre is closest to the ghost centre
+    // Find the card whose centre Y is closest to the ghost centre Y.
+    // Using Y only (not 2D distance) prevents left/right inversion in multi-column grids.
     const cards = Array.from(content.querySelectorAll('.card'))
       .filter(c => c !== ph && getComputedStyle(c).display !== 'none');
     let best = null, bestDist = Infinity;
     for (const c of cards) {
       const r  = c.getBoundingClientRect();
-      const cx = r.left + r.width  / 2;
-      const cy = r.top  + r.height / 2;
-      const d  = Math.hypot(ghostCX - cx, ghostCY - cy);
+      const cy = r.top + r.height / 2;
+      const d  = Math.abs(ghostCY - cy);
       if (d < bestDist) { bestDist = d; best = c; }
     }
     if (!best) return;
 
-    const br   = best.getBoundingClientRect();
-    const bcy  = br.top  + br.height / 2;
-    const bcx  = br.left + br.width  / 2;
-    // 12px dead zone prevents jitter near the midpoint
-    const before = ghostCY < bcy - 12 || (Math.abs(ghostCY - bcy) <= 12 && ghostCX < bcx);
-    if (before) {
+    const br  = best.getBoundingClientRect();
+    const bcy = br.top + br.height / 2;
+    if (ghostCY < bcy) {
       if (ph.nextSibling !== best) content.insertBefore(ph, best);
-    } else if (ghostCY > bcy + 12) {
+    } else {
       if (best.nextSibling !== ph) best.after(ph);
     }
   }

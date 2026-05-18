@@ -1565,3 +1565,55 @@ body {
   background: rgba(226, 40, 40, 0.05);
   min-height: 60px;
 }
+
+/* ── Weather card ───────────────────────────────────────────────────────── */
+
+.wx-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.wx-icon-wrap { flex-shrink: 0; }
+.wx-icon { width: 52px; height: 52px; display: block; }
+.wx-current { min-width: 0; }
+.wx-temp {
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text);
+  letter-spacing: -1px;
+}
+.wx-condition {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+.wx-feels {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+.wx-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+.wx-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wx-detail-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.wx-detail-val {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}

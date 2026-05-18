@@ -48,6 +48,8 @@ services:
       - SPOTIFY_CLIENT_SECRET=
       - SPOTIFY_REDIRECT_URI=
       - SPOTIFY_TOKEN_FILE=/data/spotify_token.json
+      # Weather — temperature unit: metric (°C) or imperial (°F)
+      - WEATHER_UNITS=metric
       # Manual cert paths (skip if using ACME_DOMAIN below)
       - HTTPS_CERT=
       - HTTPS_KEY=

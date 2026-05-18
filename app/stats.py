@@ -40,6 +40,7 @@ _MC_DATA_DIR      = os.environ.get("MC_DATA_DIR",          "")
 _MC_RCON_PORT     = int(os.environ.get("MC_RCON_PORT",     "25575"))
 _MC_RCON_PASSWORD = os.environ.get("MC_RCON_PASSWORD",     "")
 
+_WEATHER_UNITS = os.environ.get("WEATHER_UNITS", "metric")  # metric | imperial
 
 
 
@@ -1206,4 +1207,122 @@ def collect_all(base_url: str = ""):
         if not sp.get("authorized"):
             sp["redirect_uri"] = _spotify.get_redirect_uri(base_url)
         result["spotify"] = sp
+    return result
+
+
+# ── Weather ──────────────────────────────────────────────────────────────────
+
+_weather_lock    = threading.Lock()
+_weather_cache: dict = {}   # (lat2, lon2) -> (timestamp, data)
+_location_cache: dict = {}  # (lat2, lon2) -> (timestamp, name)
+_WEATHER_TTL  = 600    # 10 minutes
+_LOCATION_TTL = 86400  # 24 hours
+
+
+def _wmo_description(code: int) -> str:
+    if code == 0:               return "Clear sky"
+    if code <= 2:               return "Mainly clear"
+    if code == 3:               return "Overcast"
+    if code in (45, 48):        return "Fog"
+    if code in (51, 53, 55):    return "Drizzle"
+    if code in (61, 63, 65):    return "Rain"
+    if code in (71, 73, 75):    return "Snow"
+    if code == 77:              return "Snow grains"
+    if code in (80, 81, 82):    return "Showers"
+    if code in (85, 86):        return "Snow showers"
+    if code == 95:              return "Thunderstorm"
+    if code in (96, 99):        return "Heavy thunderstorm"
+    return "Unknown"
+
+
+def _wmo_icon(code: int) -> str:
+    if code == 0:               return "clear"
+    if code <= 2:               return "partly-cloudy"
+    if code == 3:               return "cloudy"
+    if code <= 48:              return "fog"
+    if code <= 55:              return "drizzle"
+    if code <= 65:              return "rain"
+    if code <= 77:              return "snow"
+    if code <= 82:              return "showers"
+    if code <= 86:              return "snow-showers"
+    return "thunderstorm"
+
+
+def _weather_location(lat: float, lon: float) -> str:
+    key = (round(lat, 2), round(lon, 2))
+    now = time.time()
+    with _weather_lock:
+        if key in _location_cache:
+            ts, name = _location_cache[key]
+            if now - ts < _LOCATION_TTL:
+                return name
+    try:
+        url = (f"https://nominatim.openstreetmap.org/reverse"
+               f"?lat={lat}&lon={lon}&format=json&zoom=10")
+        req = urllib.request.Request(url, headers={"User-Agent": "brainless-dash/1.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        addr = data.get("address", {})
+        city = (addr.get("city") or addr.get("town") or addr.get("village")
+                or addr.get("county") or "")
+        cc = addr.get("country_code", "").upper()
+        name = f"{city}, {cc}" if city and cc else city or cc or ""
+    except Exception:
+        name = ""
+    with _weather_lock:
+        _location_cache[key] = (time.time(), name)
+    return name
+
+
+def get_weather(lat: float, lon: float) -> dict:
+    key = (round(lat, 2), round(lon, 2))
+    now = time.time()
+    with _weather_lock:
+        if key in _weather_cache:
+            ts, data = _weather_cache[key]
+            if now - ts < _WEATHER_TTL:
+                return data
+
+    temp_unit = "fahrenheit" if _WEATHER_UNITS == "imperial" else "celsius"
+    wind_unit = "mph"        if _WEATHER_UNITS == "imperial" else "kmh"
+    url = (
+        f"https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        f"&current=temperature_2m,apparent_temperature,weather_code,"
+        f"wind_speed_10m,relative_humidity_2m,is_day"
+        f"&daily=temperature_2m_max,temperature_2m_min,weather_code,"
+        f"precipitation_probability_max"
+        f"&temperature_unit={temp_unit}&wind_speed_unit={wind_unit}"
+        f"&timezone=auto&forecast_days=1"
+    )
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "brainless-dash/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = json.loads(resp.read())
+    except Exception as exc:
+        log.debug("Weather fetch failed: %s", exc)
+        return {"available": False, "error": str(exc)}
+
+    cur   = raw.get("current", {})
+    daily = raw.get("daily", {})
+    code  = cur.get("weather_code", 0)
+
+    result = {
+        "available":  True,
+        "temp":       cur.get("temperature_2m"),
+        "feels_like": cur.get("apparent_temperature"),
+        "humidity":   cur.get("relative_humidity_2m"),
+        "wind":       cur.get("wind_speed_10m"),
+        "is_day":     bool(cur.get("is_day", 1)),
+        "condition":  _wmo_description(code),
+        "icon":       _wmo_icon(code),
+        "high":       (daily.get("temperature_2m_max") or [None])[0],
+        "low":        (daily.get("temperature_2m_min")  or [None])[0],
+        "precip_pct": (daily.get("precipitation_probability_max") or [None])[0],
+        "temp_unit":  "°F" if _WEATHER_UNITS == "imperial" else "°C",
+        "wind_unit":  "mph" if _WEATHER_UNITS == "imperial" else "km/h",
+        "location":   _weather_location(lat, lon),
+    }
+    with _weather_lock:
+        _weather_cache[key] = (time.time(), result)
     return result

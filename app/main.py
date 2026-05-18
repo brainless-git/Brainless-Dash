@@ -171,5 +171,10 @@ def weather_stats(lat: float, lon: float):
     return stats.get_weather(lat, lon)
 
 
+@app.get("/api/weather/detail")
+def weather_detail_stats(lat: float, lon: float):
+    return stats.get_weather_detail(lat, lon)
+
+
 # Serve static frontend from root
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

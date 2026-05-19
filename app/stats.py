@@ -1091,8 +1091,9 @@ def _mc_worker():
 
         # Keep leaderboard bounded — evict entries with lowest play time
         if len(_mc_player_times) > _MC_PLAYER_TIMES_MAX:
-            top = sorted(_mc_player_times.items(), key=lambda x: x[1], reverse=True)
-            _mc_player_times = dict(top[:_MC_PLAYER_TIMES_MAX])
+            top = sorted(_mc_player_times.items(), key=lambda x: x[1], reverse=True)[:_MC_PLAYER_TIMES_MAX]
+            _mc_player_times.clear()
+            _mc_player_times.update(top)
 
         leaderboard = sorted(
             [{"name": k, "seconds": v} for k, v in _mc_player_times.items()],

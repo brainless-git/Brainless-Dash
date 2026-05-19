@@ -17,6 +17,8 @@ import psutil
 from datetime import date, timedelta
 from pathlib import Path
 
+from . import history as _hist
+
 log = logging.getLogger(__name__)
 
 # ── Runtime config ─────────────────────────────────────────────────────────────
@@ -717,10 +719,17 @@ if _QB_API_KEY or _QB_PASSWORD:
 _mc_lock          = threading.Lock()
 _mc_result        = None
 _mc_player_times: dict = {}   # player_name → accumulated seconds seen online
-_mc_count_history: list = []  # rolling player-count samples (one per poll)
+_mc_count_history: list = []  # [[epoch, count], ...] rolling history (30 s/sample)
 _MC_POLL_INTERVAL    = 30
-_MC_HISTORY_MAX      = 240   # 2 hours at 30 s/sample
-_MC_PLAYER_TIMES_MAX = 500   # cap leaderboard to avoid unbounded growth
+_MC_HISTORY_MAX      = 40320  # 14 days at 30 s/sample
+_MC_PLAYER_TIMES_MAX = 500    # cap leaderboard to avoid unbounded growth
+
+# Load persisted MC history at startup
+_hist.load_system()
+if _MC_HISTORY_MAX:  # always true — just grouping the init block
+    _saved_pt, _saved_ch = _hist.load_minecraft()
+    _mc_player_times.update(_saved_pt)
+    _mc_count_history.extend(_saved_ch[-_MC_HISTORY_MAX:])
 
 
 def _mc_varint(n):
@@ -1068,13 +1077,14 @@ def _mc_worker():
     global _mc_result
     while True:
         result = _fetch_minecraft()
+        now = int(time.time())
 
         if result.get("online"):
             for name in result.get("players", []):
                 _mc_player_times[name] = _mc_player_times.get(name, 0) + _MC_POLL_INTERVAL
-            _mc_count_history.append(result["players_online"])
+            _mc_count_history.append([now, result["players_online"]])
         else:
-            _mc_count_history.append(0)
+            _mc_count_history.append([now, 0])
 
         if len(_mc_count_history) > _MC_HISTORY_MAX:
             _mc_count_history.pop(0)
@@ -1096,6 +1106,8 @@ def _mc_worker():
                 "player_count_history": list(_mc_count_history),
                 "player_leaderboard":   leaderboard,
             }
+
+        _hist.save_minecraft(_mc_player_times, _mc_count_history)
 
         time.sleep(_MC_POLL_INTERVAL)
 
@@ -1165,10 +1177,17 @@ def _compact_qb(qb):
 def _compact_minecraft(mc):
     if not mc or not mc.get("online"):
         return mc
-    mods = mc.get("mods") or []
-    # Detail page renders the full ops list and mod list; the dashboard card
-    # shouldn't ship them on every 2-second poll.
-    return {**mc, "mods": mods[:6], "ops": [], "data_dir_diag": None}
+    mods    = mc.get("mods") or []
+    history = mc.get("player_count_history") or []
+    # Dashboard card: strip large lists and cap history to last 2 hours.
+    # Full data is served by /api/minecraft and /api/history/minecraft.
+    return {
+        **mc,
+        "mods":                mods[:6],
+        "ops":                 [],
+        "data_dir_diag":       None,
+        "player_count_history": history[-240:],
+    }
 
 
 def _compact_sonarr(sonarr):
@@ -1213,7 +1232,27 @@ def collect_all(base_url: str = ""):
         if not sp.get("authorized"):
             sp["redirect_uri"] = _spotify.get_redirect_uri(base_url)
         result["spotify"] = sp
+    _hist.maybe_record(result)
     return result
+
+
+def get_system_history() -> dict:
+    return _hist.get_system_history()
+
+
+def get_minecraft_history():
+    if not _MC_HOST:
+        return None
+    with _mc_lock:
+        history = list(_mc_count_history)
+        pt = dict(_mc_player_times)
+    rows = _hist._downsample(history, 500)
+    leaderboard = sorted(
+        [{"name": k, "seconds": v} for k, v in pt.items()],
+        key=lambda x: x["seconds"],
+        reverse=True,
+    )
+    return {"count_history": rows, "player_leaderboard": leaderboard}
 
 
 # ── Weather ──────────────────────────────────────────────────────────────────

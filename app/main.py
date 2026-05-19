@@ -166,6 +166,19 @@ def spotify_action(action: str, payload: dict = Body(default={})):
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
 
+@app.get("/api/history/system")
+def system_history():
+    return stats.get_system_history()
+
+
+@app.get("/api/history/minecraft")
+def minecraft_history():
+    result = stats.get_minecraft_history()
+    if result is None:
+        return JSONResponse({"error": "MC_HOST not configured"}, status_code=404)
+    return result
+
+
 @app.get("/api/weather")
 def weather_stats(lat: float, lon: float):
     return stats.get_weather(lat, lon)

@@ -30,11 +30,11 @@
 set -e
 
 CERTDIR=/data/certs
+HISTDIR=/data/history
 
-# Ensure the cert storage directory exists and is writable.
-# Running as root means we can always fix ownership of the host-mounted volume.
-mkdir -p "$CERTDIR"
-chown monitor:monitor "$CERTDIR"
+# Ensure persistent storage directories exist and are writable by monitor.
+mkdir -p "$CERTDIR" "$HISTDIR"
+chown monitor:monitor "$CERTDIR" "$HISTDIR"
 
 if [ -n "$ACME_DOMAIN" ] && [ -n "$ACME_EMAIL" ]; then
     LIVE="$CERTDIR/live/$ACME_DOMAIN"

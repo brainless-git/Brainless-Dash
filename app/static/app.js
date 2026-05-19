@@ -242,6 +242,84 @@
     }, 0);
   }
 
+  // ── Historical trend chart (timestamped data) ────────────────────────────────
+
+  function downsampleArr(arr, n) {
+    if (arr.length <= n) return arr;
+    return Array.from({length: n}, (_, i) => arr[Math.floor(i * arr.length / n)]);
+  }
+
+  function drawHistChart(canvas, points, strokeHex, fmtY) {
+    // points: [[epoch, value], ...]
+    if (!canvas || !canvas.getContext) return;
+    const valid = points.filter(p => p[1] !== null && p[1] !== undefined);
+    if (valid.length < 2) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    if (!w || !h) return;
+    ctx.clearRect(0, 0, w, h);
+
+    const vals = valid.map(p => p[1]);
+    let minV = Math.min(...vals);
+    let maxV = Math.max(...vals);
+    const pad = (maxV - minV) * 0.1 || 1;
+    minV = Math.max(0, minV - pad);
+    maxV = maxV + pad;
+    const range = maxV - minV || 1;
+
+    const t0 = valid[0][0];
+    const t1 = valid[valid.length - 1][0];
+    const tRange = t1 - t0 || 1;
+    const toX = t => ((t - t0) / tRange) * w;
+    const toY = v => h - 2 - ((v - minV) / range) * (h - 16);
+
+    // Y grid lines
+    ctx.strokeStyle = '#2e2e2e';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#555';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'left';
+    for (let i = 0; i <= 3; i++) {
+      const v = minV + range * i / 3;
+      const y = Math.round(toY(v)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      ctx.fillText(fmtY(v), 3, y - 2);
+    }
+
+    // X axis label (time span)
+    const spanSecs = tRange;
+    let timeLabel;
+    if (spanSecs >= 86400 * 2) timeLabel = Math.round(spanSecs / 86400) + 'd';
+    else if (spanSecs >= 3600) timeLabel = Math.round(spanSecs / 3600) + 'h';
+    else timeLabel = Math.round(spanSecs / 60) + 'm';
+    ctx.fillStyle = '#444';
+    ctx.textAlign = 'right';
+    ctx.fillText('← ' + timeLabel + ' ago', w - 4, h - 2);
+
+    // Parse hex colour to r,g,b for fill alpha
+    let r = 128, g = 128, b = 128;
+    if (strokeHex && strokeHex.length === 7) {
+      r = parseInt(strokeHex.slice(1, 3), 16);
+      g = parseInt(strokeHex.slice(3, 5), 16);
+      b = parseInt(strokeHex.slice(5, 7), 16);
+    }
+
+    ctx.strokeStyle = strokeHex;
+    ctx.fillStyle = `rgba(${r},${g},${b},0.12)`;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    valid.forEach((p, i) => {
+      const x = toX(p[0]), y = toY(p[1]);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.lineTo(toX(valid[valid.length - 1][0]), h);
+    ctx.lineTo(toX(valid[0][0]), h);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   // ── Spotify ──────────────────────────────────────────────────────────────────
 
   // Local progress interpolation — updated on every poll
@@ -1282,10 +1360,12 @@
       (rcon ? '' : ' <span class="mc-rcon-hint">(set MC_RCON_PASSWORD to enable op/deop)</span>') +
       '</h3>';
 
-    // Player count history graph
+    // Player count history graph (short-term, from dashboard payload)
     const countHistory = mc.player_count_history || [];
-    const graphSection = countHistory.length >= 2
-      ? '<div class="detail-section"><h3>Player count history</h3>' +
+    // History is [[epoch, count], ...]; extract counts for the short-term chart
+    const recentCounts = countHistory.map(r => Array.isArray(r) ? r[1] : r);
+    const graphSection = recentCounts.length >= 2
+      ? '<div class="detail-section"><h3>Player count (recent 2h)</h3>' +
           '<canvas id="mc-count-canvas" style="width:100%;height:140px;display:block;margin-bottom:6px"></canvas>' +
         '</div>'
       : '';
@@ -1333,9 +1413,32 @@
         (mc.mod_count > 0 ? '<div class="mods-grid">' + mods + '</div>' : '<div class="empty">no mods detected</div>') +
       '</div>';
 
-    if (countHistory.length >= 2) {
-      mountCanvas('mc-count-canvas', (c) => drawMcGraph(c, countHistory, mc.players_max));
+    if (recentCounts.length >= 2) {
+      mountCanvas('mc-count-canvas', (c) => drawMcGraph(c, recentCounts, mc.players_max));
     }
+
+    // Append 14-day history chart asynchronously
+    fetch('/api/history/minecraft').then(r => r.ok ? r.json() : null).then(hist => {
+      if (!hist || !hist.count_history || hist.count_history.length < 2) return;
+      const section = document.createElement('div');
+      section.className = 'detail-section';
+      section.innerHTML = '<h3>14-day player count</h3>' +
+        '<canvas id="mc-hist-canvas" style="width:100%;height:140px;display:block;margin-bottom:6px"></canvas>';
+      const detailBody = $('detail-body');
+      // Insert before the leaderboard (4th section: banner, diag?, stats, graph, lb)
+      const graphEl = $('mc-count-canvas');
+      const graphSection2 = graphEl ? graphEl.closest('.detail-section') : null;
+      if (graphSection2) {
+        graphSection2.after(section);
+      } else {
+        // Insert before leaderboard section
+        const sections = detailBody.querySelectorAll('.detail-section');
+        const lb = sections[sections.length - 4]; // leaderboard is 4th from end
+        if (lb) lb.before(section); else detailBody.appendChild(section);
+      }
+      mountCanvas('mc-hist-canvas', c => drawHistChart(c, hist.count_history, '#4caf50', v => v.toFixed(0)));
+    }).catch(() => {});
+
     wireMcOpButtons();
   }
 
@@ -1734,6 +1837,20 @@
 
     $('detail-body').innerHTML = body;
     mountCanvas('temp-detail-canvas', (c) => drawTempGraph(c, sensors));
+
+    // Append 14-day history chart asynchronously
+    fetch('/api/history/system').then(r => r.ok ? r.json() : null).then(hist => {
+      if (!hist || !hist.temp || hist.temp.length < 2) return;
+      const section = document.createElement('div');
+      section.className = 'detail-section';
+      section.innerHTML = '<h3>14-day temperature trend</h3>' +
+        '<canvas id="temp-hist-canvas" style="width:100%;height:160px;display:block"></canvas>';
+      const detailBody = $('detail-body');
+      const sections = detailBody.querySelectorAll('.detail-section');
+      // Insert after the 60-second trend section
+      if (sections[1]) sections[1].after(section); else detailBody.appendChild(section);
+      mountCanvas('temp-hist-canvas', c => drawHistChart(c, hist.temp, '#e22828', v => v.toFixed(0) + '°'));
+    }).catch(() => {});
   }
 
   function renderNetworkDetail(data) {
@@ -1783,6 +1900,28 @@
 
     $('detail-body').innerHTML = body;
     mountCanvas('net-detail-canvas', drawNetGraph);
+
+    // Append 14-day history charts asynchronously
+    fetch('/api/history/system').then(r => r.ok ? r.json() : null).then(hist => {
+      if (!hist) return;
+      const hasRecv = hist.net_recv && hist.net_recv.length >= 2;
+      const hasSent = hist.net_sent && hist.net_sent.length >= 2;
+      if (!hasRecv && !hasSent) return;
+      const section = document.createElement('div');
+      section.className = 'detail-section';
+      section.innerHTML = '<h3>14-day network trend</h3>' +
+        (hasRecv ? '<canvas id="net-hist-recv-canvas" style="width:100%;height:120px;display:block;margin-bottom:6px"></canvas>' : '') +
+        (hasSent ? '<canvas id="net-hist-sent-canvas" style="width:100%;height:120px;display:block"></canvas>' : '') +
+        '<div class="net-graph-legend" style="margin-top:6px">' +
+        (hasRecv ? '<span class="net-legend-item"><span class="net-legend-dot" style="background:#e22828"></span>↓ Down</span>' : '') +
+        (hasSent ? '<span class="net-legend-item"><span class="net-legend-dot" style="background:#4caf50"></span>↑ Up</span>' : '') +
+        '</div>';
+      const detailBody = $('detail-body');
+      const sections = detailBody.querySelectorAll('.detail-section');
+      if (sections[1]) sections[1].after(section); else detailBody.appendChild(section);
+      if (hasRecv) mountCanvas('net-hist-recv-canvas', c => drawHistChart(c, hist.net_recv, '#e22828', v => fmtBytes(v) + '/s'));
+      if (hasSent) mountCanvas('net-hist-sent-canvas', c => drawHistChart(c, hist.net_sent, '#4caf50', v => fmtBytes(v) + '/s'));
+    }).catch(() => {});
   }
 
   function _deviceIcon(type) {

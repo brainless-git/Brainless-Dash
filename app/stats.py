@@ -1202,6 +1202,7 @@ def _compact_sonarr(sonarr):
 
 def collect_all(base_url: str = ""):
     from . import spotify as _spotify
+    from . import unifi as _unifi
     result = {
         "timestamp": int(time.time()),
         "hostname":  _HOSTNAME,
@@ -1228,6 +1229,9 @@ def collect_all(base_url: str = ""):
     mc = get_minecraft()
     if mc is not None:
         result["minecraft"] = _compact_minecraft(mc)
+    uf = _unifi.get_unifi()
+    if uf is not None:
+        result["unifi"] = uf
     sp = _spotify.get_playback()
     if sp is not None:
         if not sp.get("authorized"):

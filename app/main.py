@@ -6,7 +6,7 @@ from fastapi import Body, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import spotify, stats
+from . import spotify, stats, unifi
 
 app = FastAPI(title="Brainless-Dash", version="1.0.0")
 
@@ -164,6 +164,19 @@ def spotify_detail():
 def spotify_action(action: str, payload: dict = Body(default={})):
     result = spotify.spotify_action(action, **payload)
     return JSONResponse(result, status_code=200 if result["ok"] else 400)
+
+
+@app.get("/api/resources")
+def resources_stats():
+    return {"cpu": stats.get_cpu(), "memory": stats.get_memory()}
+
+
+@app.get("/api/unifi")
+def unifi_stats():
+    result = unifi.get_unifi()
+    if result is None:
+        return JSONResponse({"error": "UNIFI_URL / UNIFI_USERNAME not configured"}, status_code=404)
+    return result
 
 
 @app.get("/api/history/system")

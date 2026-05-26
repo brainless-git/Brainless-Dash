@@ -32,6 +32,11 @@ services:
       - QB_API_KEY=
       - MC_HOST=
       - MC_PORT=25565
+      - UNIFI_URL=
+      - UNIFI_USERNAME=
+      - UNIFI_PASSWORD=
+      - UNIFI_SITE=default
+      - UNIFI_VERIFY_SSL=true
       # Mount the Minecraft server's data directory read-only to enable
       # ops list, gamemode display, and on-disk mod count fallback.
       #   volumes:

@@ -125,6 +125,16 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `MC_RCON_PORT` | `25575` | RCON port on the Minecraft server. |
 | `MC_RCON_PASSWORD` | (unset) | RCON password. Set this to enable the Op / Deop buttons in the Minecraft drill-down view. Requires `enable-rcon=true` and a matching `rcon.password` in your `server.properties`. |
 
+### UniFi
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UNIFI_URL` | (unset) | Base URL of your UniFi Network Application or UDM, e.g. `https://192.168.1.1`. Set this to enable the UniFi card. |
+| `UNIFI_USERNAME` | (unset) | UniFi local account username. |
+| `UNIFI_PASSWORD` | (unset) | UniFi local account password. |
+| `UNIFI_SITE` | `default` | UniFi site name. Leave as `default` unless you have multiple sites. |
+| `UNIFI_VERIFY_SSL` | `true` | Set to `false` to skip SSL certificate verification. Most home controllers use self-signed certificates and require this. |
+
 ### Spotify
 
 | Variable | Default | Description |

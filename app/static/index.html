@@ -30,23 +30,13 @@
 
 <main class="content">
 
-  <section class="card" id="card-system">
-    <div class="card-head">
-      <h2>System</h2>
-      <span class="meta" id="uptime">,</span>
-    </div>
-    <div class="kv-grid">
-      <div class="kv"><span class="k">Load 1m</span><span class="v" id="load1">,</span></div>
-      <div class="kv"><span class="k">Load 5m</span><span class="v" id="load5">,</span></div>
-      <div class="kv"><span class="k">Load 15m</span><span class="v" id="load15">,</span></div>
-      <div class="kv"><span class="k">Cores</span><span class="v" id="cores">,</span></div>
-    </div>
-  </section>
-
-  <section class="card" id="card-resources">
+  <section class="card sys-drilldown" id="card-resources" data-module="resources" tabindex="0" role="link">
     <div class="card-head">
       <h2>CPU &amp; Memory</h2>
-      <span class="meta" id="resource-meta">—</span>
+      <div class="card-head-end">
+        <span class="meta" id="uptime">—</span>
+        <span class="chevron">›</span>
+      </div>
     </div>
     <div class="resource-section">
       <div class="resource-label">
@@ -62,9 +52,11 @@
       </div>
       <div class="bar"><div class="bar-fill" id="mem-bar"></div></div>
     </div>
-    <div class="kv-row">
+    <div class="kv-grid">
       <div class="kv"><span class="k">Available</span><span class="v" id="mem-available">—</span></div>
       <div class="kv"><span class="k">Swap</span><span class="v" id="swap">—</span></div>
+      <div class="kv"><span class="k">Load avg</span><span class="v" id="load1">—</span></div>
+      <div class="kv"><span class="k">Cores</span><span class="v" id="cores">—</span></div>
     </div>
   </section>
 
@@ -165,6 +157,35 @@
       <div class="kv"><span class="k">Downloading</span><span class="v" id="qb-downloading">0</span></div>
       <div class="kv"><span class="k">Seeding</span><span class="v" id="qb-seeding">0</span></div>
       <div class="kv"><span class="k">Paused</span><span class="v" id="qb-paused">0</span></div>
+    </div>
+  </section>
+
+  <section class="card module-card" id="card-unifi" data-module="unifi" tabindex="0" role="link" style="display:none">
+    <div class="card-head">
+      <div class="card-title">
+        <svg class="card-logo" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="8" cy="8" r="8" fill="#0293E8"/>
+          <path d="M8 3.5v5" stroke="white" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+          <path d="M5.5 6L8 3.5L10.5 6" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <circle cx="8" cy="12" r="1.5" fill="white"/>
+        </svg>
+        <h2>UniFi</h2>
+      </div>
+      <span class="meta" id="unifi-meta">—</span>
+    </div>
+    <div class="net-rates">
+      <div class="rate">
+        <div class="rate-label">↓ Down</div>
+        <div class="rate-value" id="unifi-down">0 B/s</div>
+      </div>
+      <div class="rate">
+        <div class="rate-label">↑ Up</div>
+        <div class="rate-value" id="unifi-up">0 B/s</div>
+      </div>
+    </div>
+    <div class="kv-row">
+      <div class="kv"><span class="k">Clients</span><span class="v" id="unifi-clients">—</span></div>
+      <div class="kv"><span class="k">Devices</span><span class="v" id="unifi-aps">—</span></div>
     </div>
   </section>
 

@@ -843,14 +843,11 @@
     $('hostname').textContent = d.hostname || 'unknown';
     $('status-dot').className = 'dot dot-on';
 
-    // System
-    $('uptime').textContent  = 'up ' + fmtUptime(d.uptime);
-    $('load1').textContent   = d.cpu.load_1m.toFixed(2);
-    $('load5').textContent   = d.cpu.load_5m.toFixed(2);
-    $('load15').textContent  = d.cpu.load_15m.toFixed(2);
-    $('cores').textContent   = d.cpu.cores + ' / ' + d.cpu.threads + 't';
+    // CPU & Memory (merged with system info)
+    $('uptime').textContent = 'up ' + fmtUptime(d.uptime);
+    $('load1').textContent  = d.cpu.load_1m.toFixed(2) + ' · ' + d.cpu.load_5m.toFixed(2) + ' · ' + d.cpu.load_15m.toFixed(2);
+    $('cores').textContent  = d.cpu.cores + ' / ' + d.cpu.threads + 't';
 
-    // CPU & Memory
     const cpuPct = d.cpu.percent;
     $('cpu-percent').textContent = cpuPct.toFixed(0);
     $('cpu-freq').textContent = d.cpu.freq_mhz ? '@ ' + (d.cpu.freq_mhz / 1000).toFixed(2) + ' GHz' : '';
@@ -868,7 +865,6 @@
     $('swap').textContent = m.swap_total > 0
       ? fmtBytes(m.swap_used) + ' / ' + fmtBytes(m.swap_total) + ' (' + m.swap_percent.toFixed(0) + '%)'
       : 'none';
-    $('resource-meta').textContent = 'CPU ' + cpuPct.toFixed(0) + '% · MEM ' + m.percent.toFixed(0) + '%';
 
     // Temperatures
     const temps = d.temps || [];
@@ -1010,6 +1006,29 @@
       }
     } else {
       plexCard.style.display = 'none';
+    }
+
+    // UniFi
+    const unifiCard = $('card-unifi');
+    if (d.unifi) {
+      unifiCard.style.display = '';
+      const uf = d.unifi;
+      if (!uf.available) {
+        $('unifi-meta').textContent = uf.error || 'unavailable';
+        $('unifi-down').textContent = '—';
+        $('unifi-up').textContent   = '—';
+        $('unifi-clients').textContent = '—';
+        $('unifi-aps').textContent     = '—';
+      } else {
+        const wanDot = uf.wan_status === 'ok' ? '●' : '○';
+        $('unifi-meta').textContent = wanDot + ' WAN · ' + uf.clients + ' clients';
+        $('unifi-down').textContent = fmtRate(uf.wan_down_bps);
+        $('unifi-up').textContent   = fmtRate(uf.wan_up_bps);
+        $('unifi-clients').textContent = uf.clients;
+        $('unifi-aps').textContent     = uf.ap_online + ' / ' + uf.ap_total;
+      }
+    } else {
+      unifiCard.style.display = 'none';
     }
 
     // Minecraft
@@ -1168,11 +1187,13 @@
   // ── Detail view router ──────────────────────────────────────────────────────
 
   const MODULES = {
+    resources:   { title: 'CPU & Memory',  endpoint: '/api/resources',      render: renderResourcesDetail },
     minecraft:   { title: 'Minecraft',     endpoint: '/api/minecraft',      render: renderMinecraftDetail },
     qbittorrent: { title: 'qBittorrent',   endpoint: '/api/qbittorrent',    render: renderQbDetail },
     sabnzbd:     { title: 'SABnzbd',       endpoint: '/api/sabnzbd',        render: renderSabDetail },
     sonarr:      { title: 'Sonarr',        endpoint: '/api/sonarr',         render: renderSonarrDetail },
     plex:        { title: 'Plex',          endpoint: '/api/plex',           render: renderPlexDetail },
+    unifi:       { title: 'UniFi',         endpoint: '/api/unifi',          render: renderUnifiDetail },
     temps:       { title: 'Temperatures',  endpoint: '/api/temps',          render: renderTempsDetail },
     network:     { title: 'Network',       endpoint: '/api/network',        render: renderNetworkDetail },
     storage:     { title: 'Storage',       endpoint: '/api/storage',        render: renderStorageDetail },
@@ -1762,6 +1783,103 @@
 
   // ── System drilldown renderers ───────────────────────────────────────────────
 
+  function renderResourcesDetail(data) {
+    const cpu = data.cpu || {};
+    const mem = data.memory || {};
+    $('detail-meta').textContent = 'CPU ' + (cpu.percent || 0).toFixed(0) + '% · MEM ' + (mem.percent || 0).toFixed(0) + '%';
+
+    const statsHtml =
+      statItem('CPU', (cpu.percent || 0).toFixed(0) + '%', barClass(cpu.percent || 0)) +
+      statItem('Frequency', cpu.freq_mhz ? (cpu.freq_mhz / 1000).toFixed(2) + ' GHz' : '—') +
+      statItem('Cores', (cpu.cores || '—') + ' / ' + (cpu.threads || '—') + 't') +
+      statItem('Load avg', (cpu.load_1m || 0).toFixed(2) + ' · ' + (cpu.load_5m || 0).toFixed(2) + ' · ' + (cpu.load_15m || 0).toFixed(2)) +
+      statItem('Memory', fmtBytes(mem.used) + ' / ' + fmtBytes(mem.total), barClass(mem.percent || 0)) +
+      statItem('Available', fmtBytes(mem.available)) +
+      (mem.swap_total > 0 ? statItem('Swap', fmtBytes(mem.swap_used) + ' / ' + fmtBytes(mem.swap_total) + ' (' + (mem.swap_percent || 0).toFixed(0) + '%)') : '');
+
+    $('detail-body').innerHTML =
+      '<div class="detail-section"><div class="detail-stats">' + statsHtml + '</div></div>';
+
+    // Fetch 14-day history and append charts
+    fetch('/api/history/system').then(r => r.ok ? r.json() : null).then(hist => {
+      if (!hist) return;
+      const db = $('detail-body');
+      if (hist.cpu && hist.cpu.length >= 2) {
+        const s = document.createElement('div');
+        s.className = 'detail-section';
+        s.innerHTML = '<h3>14-day CPU trend</h3><canvas id="cpu-hist-canvas" style="width:100%;height:140px;display:block"></canvas>';
+        db.appendChild(s);
+        mountCanvas('cpu-hist-canvas', c => drawHistChart(c, hist.cpu, '#e22828', v => v.toFixed(0) + '%'));
+      }
+      if (hist.mem && hist.mem.length >= 2) {
+        const s = document.createElement('div');
+        s.className = 'detail-section';
+        s.innerHTML = '<h3>14-day memory trend</h3><canvas id="mem-hist-canvas" style="width:100%;height:140px;display:block"></canvas>';
+        db.appendChild(s);
+        mountCanvas('mem-hist-canvas', c => drawHistChart(c, hist.mem, '#2196f3', v => v.toFixed(0) + '%'));
+      }
+    }).catch(() => {});
+  }
+
+  function renderUnifiDetail(data) {
+    if (!data.available) {
+      $('detail-meta').textContent = 'unavailable';
+      $('detail-body').innerHTML = '<div class="detail-section"><div class="empty">' +
+        esc(data.error || 'UniFi unavailable') + '</div></div>';
+      return;
+    }
+
+    const wanCls = data.wan_status === 'ok' ? 'ok' : 'crit';
+    $('detail-meta').textContent = data.clients + ' clients';
+
+    const statsHtml =
+      statItem('WAN', data.wan_status === 'ok' ? 'connected' : 'error', wanCls) +
+      (data.wan_ip ? statItem('WAN IP', data.wan_ip) : '') +
+      statItem('↓ Down', fmtRate(data.wan_down_bps), 'accent') +
+      statItem('↑ Up',   fmtRate(data.wan_up_bps),   'ok') +
+      statItem('Clients', data.clients) +
+      statItem('Devices', data.ap_online + ' / ' + data.ap_total + ' online');
+
+    let body = '<div class="detail-section"><div class="detail-stats">' + statsHtml + '</div></div>';
+
+    const clients = data.client_list || [];
+    if (clients.length) {
+      body += '<div class="detail-section"><h3>Clients (' + clients.length + ')</h3>' +
+        '<div class="iface-list">' +
+        clients.map(c => {
+          const type = c.type === 'wireless' ? '📶' : '🔌';
+          const rssi = c.rssi != null ? ' · ' + c.rssi + ' dBm' : '';
+          return '<div class="iface-item">' +
+            '<div class="iface-head">' +
+              '<span class="iface-name">' + type + ' ' + esc(c.hostname || c.ip || '—') + '</span>' +
+              '<span class="iface-rates">' + fmtRate(c.rx_bps) + ' ↓ · ' + fmtRate(c.tx_bps) + ' ↑</span>' +
+            '</div>' +
+            (c.ip ? '<div class="iface-totals">' + esc(c.ip) + rssi + '</div>' : '') +
+          '</div>';
+        }).join('') +
+        '</div></div>';
+    }
+
+    const devices = data.device_list || [];
+    if (devices.length) {
+      body += '<div class="detail-section"><h3>Devices (' + devices.length + ')</h3>' +
+        '<div class="iface-list">' +
+        devices.map(d => {
+          const statusCls = d.online ? 'dot dot-on' : 'dot dot-off';
+          return '<div class="iface-item">' +
+            '<div class="iface-head">' +
+              '<span class="iface-name"><span class="' + statusCls + '" style="margin-right:6px"></span>' + esc(d.name) + '</span>' +
+              '<span class="iface-rates">' + esc(d.model || d.type || '') + '</span>' +
+            '</div>' +
+            (d.version ? '<div class="iface-totals">v' + esc(d.version) + (d.clients ? ' · ' + d.clients + ' clients' : '') + '</div>' : '') +
+          '</div>';
+        }).join('') +
+        '</div></div>';
+    }
+
+    $('detail-body').innerHTML = body;
+  }
+
   function renderTempsDetail(data) {
     const sensors = data.sensors || [];
     const fans    = data.fans    || [];
@@ -1958,10 +2076,68 @@
     }
 
     if (!pb.active) {
-      $('detail-meta').textContent = pb.device_name || 'idle';
-      $('detail-body').innerHTML =
-        '<div class="detail-section"><div class="spotify-idle">No active playback</div></div>';
       _spPlaying = false;
+      $('detail-meta').textContent = 'idle';
+
+      // Still render recently played and devices when idle
+      const idleDevices = data.devices || [];
+      const idleRecent  = data.recently_played || [];
+      let idleBody = '<div class="detail-section"><div class="spotify-idle">No active playback</div></div>';
+
+      if (idleDevices.length) {
+        idleBody += '<div class="detail-section"><h3>Devices</h3><div class="sp-device-list">' +
+          idleDevices.map(dev => {
+            const activeCls = dev.is_active ? ' sp-device-active' : '';
+            const switchAttrs = !dev.is_active
+              ? ' data-device-id="' + esc(dev.id) + '" role="button" tabindex="0" title="Switch to this device"'
+              : '';
+            const metaParts = [dev.type];
+            if (dev.is_active) metaParts.push('<span class="sp-device-playing">· playing</span>');
+            if (dev.volume != null) metaParts.push(dev.volume + '%');
+            return '<div class="sp-device-item' + activeCls + '"' + switchAttrs + '>' +
+              '<span class="sp-device-icon">' + _deviceIcon(dev.type) + '</span>' +
+              '<div class="sp-device-info">' +
+                '<div class="sp-device-name">' + esc(dev.name) + '</div>' +
+                '<div class="sp-device-meta">' + metaParts.join(' ') + '</div>' +
+              '</div></div>';
+          }).join('') +
+        '</div></div>';
+      }
+
+      if (data.recent_scope_missing) {
+        idleBody += '<div class="detail-section"><h3>Recently Played</h3>' +
+          '<div class="sp-scope-hint">Re-authorise Spotify to see history — the app needs the <code>user-read-recently-played</code> scope. ' +
+            '<a href="/api/spotify/auth">Re-authorise</a></div></div>';
+      } else if (idleRecent.length) {
+        idleBody += '<div class="detail-section"><h3>Recently Played</h3><div class="sp-track-list">' +
+          idleRecent.map(t => {
+            const artEl = t.art_url
+              ? '<img class="sp-track-art" src="' + esc(t.art_url) + '" alt="">'
+              : '<div class="sp-track-art"></div>';
+            const sub = [t.artist, t.album].filter(Boolean).join(' · ');
+            return '<div class="sp-track-item">' +
+              artEl +
+              '<div class="sp-track-info">' +
+                '<div class="sp-track-name">' + esc(t.name) + '</div>' +
+                (sub ? '<div class="sp-track-sub">' + esc(sub) + '</div>' : '') +
+              '</div>' +
+              '<span class="sp-track-dur sp-track-ago">' + (t.played_at ? _timeAgo(t.played_at) : '') + '</span>' +
+            '</div>';
+          }).join('') +
+        '</div></div>';
+      }
+
+      $('detail-body').innerHTML = idleBody;
+
+      // Wire device transfer buttons
+      document.querySelectorAll('.sp-device-item[data-device-id]').forEach(el => {
+        const deviceId = el.getAttribute('data-device-id');
+        const transfer = () => _spotifyControl('transfer', { device_id: deviceId });
+        el.addEventListener('click', transfer);
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); transfer(); }
+        });
+      });
       return;
     }
 

@@ -155,8 +155,8 @@ def _fetch_unifi() -> dict:
                     if dev.get("state") == 1:
                         ap_online += 1
 
-        # Parse WAN subsystem health
-        wan_status   = "unknown"
+        # Parse WAN subsystem health (remains None when no WAN device detected)
+        wan_status   = None
         wan_ip       = ""
         wan_down_bps = 0.0
         wan_up_bps   = 0.0
@@ -175,8 +175,10 @@ def _fetch_unifi() -> dict:
                 "ip":       sta.get("ip", ""),
                 "type":     "wireless" if sta.get("is_wired") is False else "wired",
                 "rssi":     sta.get("rssi"),
-                "tx_bps":   sta.get("tx_bytes_r", 0),
-                "rx_bps":   sta.get("rx_bytes_r", 0),
+                "dl_bps":   float(sta.get("tx_bytes_r") or 0),   # AP→client = client download
+                "ul_bps":   float(sta.get("rx_bytes_r") or 0),   # client→AP = client upload
+                "dl_bytes": int(sta.get("tx_bytes") or 0),
+                "ul_bytes": int(sta.get("rx_bytes") or 0),
             })
 
         # Compact device list (name + state + type)

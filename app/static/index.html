@@ -175,17 +175,17 @@
     </div>
     <div class="net-rates">
       <div class="rate">
-        <div class="rate-label">↓ Down</div>
-        <div class="rate-value" id="unifi-down">0 B/s</div>
+        <div class="rate-label">Clients</div>
+        <div class="rate-value" id="unifi-clients">—</div>
       </div>
       <div class="rate">
-        <div class="rate-label">↑ Up</div>
-        <div class="rate-value" id="unifi-up">0 B/s</div>
+        <div class="rate-label">Devices</div>
+        <div class="rate-value" id="unifi-aps">—</div>
       </div>
     </div>
-    <div class="kv-row">
-      <div class="kv"><span class="k">Clients</span><span class="v" id="unifi-clients">—</span></div>
-      <div class="kv"><span class="k">Devices</span><span class="v" id="unifi-aps">—</span></div>
+    <div class="kv-row" id="unifi-wan-row" style="display:none">
+      <div class="kv"><span class="k">↓ WAN</span><span class="v" id="unifi-down">0 B/s</span></div>
+      <div class="kv"><span class="k">↑ WAN</span><span class="v" id="unifi-up">0 B/s</span></div>
     </div>
   </section>
 

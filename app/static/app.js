@@ -1014,16 +1014,22 @@
       unifiCard.style.display = '';
       const uf = d.unifi;
       if (!uf.available) {
-        $('unifi-meta').textContent = uf.error || 'unavailable';
-        $('unifi-down').textContent = '—';
-        $('unifi-up').textContent   = '—';
+        $('unifi-meta').textContent    = uf.error || 'unavailable';
         $('unifi-clients').textContent = '—';
         $('unifi-aps').textContent     = '—';
+        $('unifi-wan-row').style.display = 'none';
       } else {
-        const wanDot = uf.wan_status === 'ok' ? '●' : '○';
-        $('unifi-meta').textContent = wanDot + ' WAN · ' + uf.clients + ' clients';
-        $('unifi-down').textContent = fmtRate(uf.wan_down_bps);
-        $('unifi-up').textContent   = fmtRate(uf.wan_up_bps);
+        const hasWan = uf.wan_status != null;
+        if (hasWan) {
+          const wanDot = uf.wan_status === 'ok' ? '●' : '○';
+          $('unifi-meta').textContent      = wanDot + ' WAN';
+          $('unifi-down').textContent      = fmtRate(uf.wan_down_bps);
+          $('unifi-up').textContent        = fmtRate(uf.wan_up_bps);
+          $('unifi-wan-row').style.display = '';
+        } else {
+          $('unifi-meta').textContent      = 'online';
+          $('unifi-wan-row').style.display = 'none';
+        }
         $('unifi-clients').textContent = uf.clients;
         $('unifi-aps').textContent     = uf.ap_online + ' / ' + uf.ap_total;
       }
@@ -1829,16 +1835,21 @@
       return;
     }
 
-    const wanCls = data.wan_status === 'ok' ? 'ok' : 'crit';
     $('detail-meta').textContent = data.clients + ' clients';
 
-    const statsHtml =
-      statItem('WAN', data.wan_status === 'ok' ? 'connected' : 'error', wanCls) +
-      (data.wan_ip ? statItem('WAN IP', data.wan_ip) : '') +
-      statItem('↓ Down', fmtRate(data.wan_down_bps), 'accent') +
-      statItem('↑ Up',   fmtRate(data.wan_up_bps),   'ok') +
+    const hasWan = data.wan_status != null;
+    let statsHtml =
       statItem('Clients', data.clients) +
       statItem('Devices', data.ap_online + ' / ' + data.ap_total + ' online');
+    if (hasWan) {
+      const wanCls = data.wan_status === 'ok' ? 'ok' : 'crit';
+      statsHtml =
+        statItem('WAN', data.wan_status === 'ok' ? 'connected' : 'error', wanCls) +
+        (data.wan_ip ? statItem('WAN IP', data.wan_ip) : '') +
+        statItem('↓ Down', fmtRate(data.wan_down_bps), 'accent') +
+        statItem('↑ Up',   fmtRate(data.wan_up_bps),   'ok') +
+        statsHtml;
+    }
 
     let body = '<div class="detail-section"><div class="detail-stats">' + statsHtml + '</div></div>';
 
@@ -1849,10 +1860,14 @@
         clients.map(c => {
           const type = c.type === 'wireless' ? '📶' : '🔌';
           const rssi = c.rssi != null ? ' · ' + c.rssi + ' dBm' : '';
+          const hasRates = (c.dl_bps || 0) > 0 || (c.ul_bps || 0) > 0;
+          const rateStr = hasRates
+            ? fmtRate(c.dl_bps) + ' ↓ · ' + fmtRate(c.ul_bps) + ' ↑'
+            : fmtBytes(c.dl_bytes || 0) + ' ↓ · ' + fmtBytes(c.ul_bytes || 0) + ' ↑';
           return '<div class="iface-item">' +
             '<div class="iface-head">' +
               '<span class="iface-name">' + type + ' ' + esc(c.hostname || c.ip || '—') + '</span>' +
-              '<span class="iface-rates">' + fmtRate(c.rx_bps) + ' ↓ · ' + fmtRate(c.tx_bps) + ' ↑</span>' +
+              '<span class="iface-rates">' + rateStr + '</span>' +
             '</div>' +
             (c.ip ? '<div class="iface-totals">' + esc(c.ip) + rssi + '</div>' : '') +
           '</div>';

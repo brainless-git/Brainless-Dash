@@ -134,6 +134,8 @@ Open `http://<unraid-ip>:8090` from any device on the LAN.
 | `UNIFI_PASSWORD` | (unset) | UniFi local account password. |
 | `UNIFI_SITE` | `default` | UniFi site name. Leave as `default` unless you have multiple sites. |
 | `UNIFI_VERIFY_SSL` | `true` | Set to `false` to skip SSL certificate verification. Most home controllers use self-signed certificates and require this. |
+| `UNIFI_SNMP_COMMUNITY` | (unset) | SNMP v2c community string for device polling (e.g. `public`). Set this to enable per-port interface statistics. SNMP must be enabled on your UniFi devices first. |
+| `UNIFI_SNMP_PORT` | `161` | UDP port for SNMP queries. |
 
 ### Spotify
 

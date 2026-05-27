@@ -9,6 +9,8 @@ import time
 import urllib.error
 import urllib.request
 
+from . import snmp as _snmp
+
 log = logging.getLogger(__name__)
 
 _UNIFI_URL        = os.environ.get("UNIFI_URL",        "").rstrip("/")
@@ -17,11 +19,20 @@ _UNIFI_PASSWORD   = os.environ.get("UNIFI_PASSWORD",   "")
 _UNIFI_SITE       = os.environ.get("UNIFI_SITE",       "default")
 _UNIFI_VERIFY_SSL = os.environ.get("UNIFI_VERIFY_SSL", "true").lower() not in ("false", "0", "no")
 
-_POLL_INTERVAL = 30
-_LOGIN_TTL     = 3600   # re-authenticate after 1 hour
+_SNMP_COMMUNITY = os.environ.get("UNIFI_SNMP_COMMUNITY", "")
+_SNMP_PORT      = int(os.environ.get("UNIFI_SNMP_PORT", "161"))
+
+_POLL_INTERVAL  = 30
+_SNMP_INTERVAL  = 60
+_LOGIN_TTL      = 3600   # re-authenticate after 1 hour
 
 _lock   = threading.Lock()
 _result = None
+
+# SNMP cache — written by _snmp_worker, read by get_unifi().
+_snmp_lock  = threading.Lock()
+_snmp_cache: dict = {}                  # {device_ip: snmp_data_dict}
+_snmp_prev:  dict = {}                  # {device_ip: {ts, ifaces}} for rate computation
 
 # Session state — only touched by the worker thread after startup.
 _csrf_token  = ""
@@ -181,7 +192,7 @@ def _fetch_unifi() -> dict:
                 "ul_bytes": int(sta.get("rx_bytes") or 0),
             })
 
-        # Compact device list (name + state + type)
+        # Compact device list — include IP so the SNMP worker can poll it
         devices = []
         for dev in device_list[:50]:
             devices.append({
@@ -191,6 +202,7 @@ def _fetch_unifi() -> dict:
                 "version": dev.get("version", ""),
                 "online":  dev.get("state") == 1,
                 "clients": dev.get("num_sta", 0),
+                "ip":      dev.get("ip", ""),
             })
 
         return {
@@ -222,13 +234,78 @@ def _unifi_worker() -> None:
         time.sleep(_POLL_INTERVAL)
 
 
+def _apply_rates(ip: str, data: dict) -> None:
+    """Compute per-interface in_bps / out_bps from delta against previous poll."""
+    now  = time.time()
+    prev = _snmp_prev.get(ip)
+    if prev:
+        dt = now - prev["ts"]
+        if dt > 0:
+            prev_ifaces = prev["ifaces"]
+            for iface in data["interfaces"]:
+                p = prev_ifaces.get(iface["index"])
+                if p:
+                    in_d  = max(0, iface["in_bytes"]  - p["in_bytes"])
+                    out_d = max(0, iface["out_bytes"] - p["out_bytes"])
+                    iface["in_bps"]  = int(in_d * 8 / dt)
+                    iface["out_bps"] = int(out_d * 8 / dt)
+    _snmp_prev[ip] = {
+        "ts":     now,
+        "ifaces": {i["index"]: {"in_bytes": i["in_bytes"], "out_bytes": i["out_bytes"]}
+                   for i in data["interfaces"]},
+    }
+
+
+def _snmp_worker() -> None:
+    while True:
+        with _lock:
+            r = _result
+        if r and r.get("available"):
+            targets = [
+                (d["ip"], d["name"])
+                for d in r.get("device_list", [])
+                if d.get("online") and d.get("ip")
+            ]
+            new_cache: dict = {}
+            for ip, name in targets:
+                try:
+                    data = _snmp.poll_device(ip, community=_SNMP_COMMUNITY, port=_SNMP_PORT)
+                    if data:
+                        _apply_rates(ip, data)
+                        new_cache[ip] = data
+                        log.debug("SNMP %s (%s): %d interfaces", name, ip, len(data["interfaces"]))
+                    else:
+                        log.debug("SNMP %s (%s): no response", name, ip)
+                except Exception as exc:
+                    log.debug("SNMP poll %s (%s): %s", name, ip, exc)
+            with _snmp_lock:
+                _snmp_cache.clear()
+                _snmp_cache.update(new_cache)
+        time.sleep(_SNMP_INTERVAL)
+
+
 def get_unifi():
     """Return latest UniFi data, or None if not configured."""
     if not _UNIFI_URL or not _UNIFI_USERNAME:
         return None
     with _lock:
-        return _result
+        r = _result
+    if r is None or not _SNMP_COMMUNITY:
+        return r
+    with _snmp_lock:
+        sc = dict(_snmp_cache)
+    if not sc:
+        return r
+    return {
+        **r,
+        "device_list": [
+            {**d, "snmp": sc.get(d.get("ip"))}
+            for d in r.get("device_list", [])
+        ],
+    }
 
 
 if _UNIFI_URL and _UNIFI_USERNAME:
     threading.Thread(target=_unifi_worker, daemon=True, name="unifi-poller").start()
+    if _SNMP_COMMUNITY:
+        threading.Thread(target=_snmp_worker, daemon=True, name="unifi-snmp").start()

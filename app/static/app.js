@@ -1881,13 +1881,47 @@
         '<div class="iface-list">' +
         devices.map(d => {
           const statusCls = d.online ? 'dot dot-on' : 'dot dot-off';
-          return '<div class="iface-item">' +
+          let html = '<div class="iface-item">' +
             '<div class="iface-head">' +
               '<span class="iface-name"><span class="' + statusCls + '" style="margin-right:6px"></span>' + esc(d.name) + '</span>' +
               '<span class="iface-rates">' + esc(d.model || d.type || '') + '</span>' +
             '</div>' +
-            (d.version ? '<div class="iface-totals">v' + esc(d.version) + (d.clients ? ' · ' + d.clients + ' clients' : '') + '</div>' : '') +
-          '</div>';
+            (d.version ? '<div class="iface-totals">v' + esc(d.version) + (d.clients ? ' · ' + d.clients + ' clients' : '') + '</div>' : '');
+
+          if (d.snmp) {
+            const s = d.snmp;
+            if (s.uptime) {
+              html += '<div class="iface-totals" style="color:var(--dim)">uptime ' + fmtUptime(s.uptime) + (s.sysname ? ' · ' + esc(s.sysname) : '') + '</div>';
+            }
+            const ifaces = (s.interfaces || []).filter(i => i.up || i.in_bytes > 0 || i.out_bytes > 0);
+            if (ifaces.length) {
+              html += '<div class="iface-list" style="margin-top:4px;border-top:1px solid var(--border)">' +
+                ifaces.map(iface => {
+                  const portDot = iface.up ? 'dot dot-on' : 'dot dot-off';
+                  const speed = iface.speed_bps >= 1e9 ? (iface.speed_bps / 1e9).toFixed(0) + 'G'
+                              : iface.speed_bps >= 1e6 ? (iface.speed_bps / 1e6).toFixed(0) + 'M'
+                              : '';
+                  const hasRates = (iface.in_bps || 0) > 0 || (iface.out_bps || 0) > 0;
+                  const trafficStr = hasRates
+                    ? fmtRate(iface.in_bps) + ' ↓ · ' + fmtRate(iface.out_bps) + ' ↑'
+                    : fmtBytes(iface.in_bytes) + ' ↓ · ' + fmtBytes(iface.out_bytes) + ' ↑';
+                  const errStr = (iface.in_err || iface.out_err)
+                    ? '<div class="iface-totals" style="color:var(--crit)">' + iface.in_err + ' in err · ' + iface.out_err + ' out err</div>'
+                    : '';
+                  return '<div class="iface-item">' +
+                    '<div class="iface-head">' +
+                      '<span class="iface-name"><span class="' + portDot + '" style="margin-right:4px"></span>' +
+                        esc(iface.name) + (speed ? ' <span class="meta-dim">' + speed + '</span>' : '') + '</span>' +
+                      '<span class="iface-rates">' + trafficStr + '</span>' +
+                    '</div>' + errStr +
+                  '</div>';
+                }).join('') +
+              '</div>';
+            }
+          }
+
+          html += '</div>';
+          return html;
         }).join('') +
         '</div></div>';
     }

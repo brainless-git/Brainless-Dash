@@ -10,19 +10,18 @@ import urllib.request
 log = logging.getLogger(__name__)
 
 _CABINET_URL     = os.environ.get("CABINET_TEMP_URL", "").rstrip("/")
-_POLL_INTERVAL   = 30
-_RECORD_INTERVAL = 60      # seconds between history samples
-_HIST_MAX        = 1440    # 24 h at 60 s/sample
-_HIST_FILE       = pathlib.Path("/data/history/cabinet.json")
+_POLL_INTERVAL = 30
+_HIST_MAX      = 2880      # 24 h at 30 s/sample
+_HIST_FILE     = pathlib.Path("/data/history/cabinet.json")
 
 _RETRIES     = 3           # attempts per poll cycle
 _RETRY_DELAY = 2.0         # seconds between retries
 
-_lock        = threading.Lock()
-_result      = None
-_last_good   = None        # last successful reading, returned on transient failure
+_lock      = threading.Lock()
+_hist_lock = threading.Lock()
+_result    = None
+_last_good = None          # last successful reading, returned on transient failure
 _history: list = []        # [[epoch, temp_c, humidity], ...]
-_last_record = 0.0
 
 
 def _load_history() -> None:
@@ -30,37 +29,40 @@ def _load_history() -> None:
         if _HIST_FILE.exists():
             raw = json.loads(_HIST_FILE.read_text())
             cutoff = time.time() - 86400
-            _history.extend(
-                r for r in raw
-                if isinstance(r, list) and len(r) >= 3 and r[0] > cutoff
-            )
+            with _hist_lock:
+                _history.extend(
+                    r for r in raw
+                    if isinstance(r, list) and len(r) >= 3 and r[0] > cutoff
+                )
+            log.info("Cabinet: loaded %d history points", len(_history))
     except Exception as exc:
-        log.debug("Cabinet history load: %s", exc)
+        log.warning("Cabinet history load: %s", exc)
 
 
 def _save_history() -> None:
     try:
         _HIST_FILE.parent.mkdir(parents=True, exist_ok=True)
         tmp = _HIST_FILE.with_suffix(".tmp")
-        tmp.write_text(json.dumps(_history))
+        with _hist_lock:
+            snapshot = list(_history)
+        tmp.write_text(json.dumps(snapshot))
         tmp.chmod(0o600)
         tmp.replace(_HIST_FILE)
     except Exception as exc:
-        log.debug("Cabinet history save: %s", exc)
+        log.warning("Cabinet history save: %s", exc)
 
 
 def _record(temp_c: float, humidity: float) -> None:
-    global _last_record
+    """Append a reading and trim to 24 h. Called on every successful poll."""
     now = time.time()
-    if now - _last_record < _RECORD_INTERVAL:
-        return
-    _last_record = now
-    _history.append([int(now), round(temp_c, 2), round(humidity, 2)])
     cutoff = now - 86400
-    while _history and _history[0][0] < cutoff:
-        _history.pop(0)
-    if len(_history) > _HIST_MAX:
-        del _history[:-_HIST_MAX]
+    with _hist_lock:
+        _history.append([int(now), round(temp_c, 2), round(humidity, 2)])
+        while _history and _history[0][0] < cutoff:
+            _history.pop(0)
+        if len(_history) > _HIST_MAX:
+            del _history[:-_HIST_MAX]
+    log.debug("Cabinet: history now %d points", len(_history))
     _save_history()
 
 
@@ -118,7 +120,8 @@ def get_cabinet_history():
     """Return 24-hour temperature and humidity history, or None if not configured."""
     if not _CABINET_URL:
         return None
-    points = list(_history)
+    with _hist_lock:
+        points = list(_history)
     return {
         "temp":     [[r[0], r[1]] for r in points],
         "humidity": [[r[0], r[2]] for r in points],

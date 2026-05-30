@@ -1047,7 +1047,7 @@
         $('cabinet-temp').textContent    = '—';
         $('cabinet-humidity').textContent = '—';
       } else {
-        $('cabinet-meta').textContent    = cab.comfort || '';
+        $('cabinet-meta').textContent    = cab.stale ? 'last reading' : '';
         $('cabinet-temp').textContent    = cab.temperature_c.toFixed(1) + '°C';
         $('cabinet-humidity').textContent = cab.humidity.toFixed(0) + '%';
       }
@@ -1956,18 +1956,33 @@
       return;
     }
 
-    $('detail-meta').textContent = data.comfort || '';
-
-    const uptimeSecs = Math.floor((data.uptime_ms || 0) / 1000);
-    const statsHtml =
-      statItem('Temperature', data.temperature_c.toFixed(1) + '°C') +
-      statItem('', data.temperature_f.toFixed(1) + '°F') +
-      statItem('Humidity', data.humidity.toFixed(1) + '%') +
-      statItem('Comfort', data.comfort || '—') +
-      (uptimeSecs ? statItem('Sensor uptime', fmtUptime(uptimeSecs)) : '');
+    const stale = data.stale ? ' (last reading)' : '';
+    $('detail-meta').textContent = data.temperature_c.toFixed(1) + '°C · ' + data.humidity.toFixed(0) + '%' + stale;
 
     $('detail-body').innerHTML =
-      '<div class="detail-section"><div class="detail-stats">' + statsHtml + '</div></div>';
+      '<div class="detail-section"><div class="detail-stats">' +
+        statItem('Temperature', data.temperature_c.toFixed(1) + '°C') +
+        statItem('Humidity',    data.humidity.toFixed(1) + '%') +
+      '</div></div>';
+
+    fetch('/api/history/cabinet').then(r => r.json()).then(hist => {
+      if (!hist) return;
+      const db = $('detail-body');
+      if (hist.temp && hist.temp.length > 1) {
+        const s = document.createElement('div');
+        s.className = 'detail-section';
+        s.innerHTML = '<h3>Temperature — 24 h</h3><canvas id="cab-temp-canvas" style="width:100%;height:80px"></canvas>';
+        db.appendChild(s);
+        mountCanvas('cab-temp-canvas', c => drawHistChart(c, hist.temp, '#e22828', v => v.toFixed(1) + '°C'));
+      }
+      if (hist.humidity && hist.humidity.length > 1) {
+        const s = document.createElement('div');
+        s.className = 'detail-section';
+        s.innerHTML = '<h3>Humidity — 24 h</h3><canvas id="cab-hum-canvas" style="width:100%;height:80px"></canvas>';
+        db.appendChild(s);
+        mountCanvas('cab-hum-canvas', c => drawHistChart(c, hist.humidity, '#2196f3', v => v.toFixed(0) + '%'));
+      }
+    }).catch(() => {});
   }
 
   function renderTempsDetail(data) {

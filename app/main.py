@@ -187,6 +187,14 @@ def cabinet_stats():
     return result
 
 
+@app.get("/api/history/cabinet")
+def cabinet_history():
+    result = cabinet.get_cabinet_history()
+    if result is None:
+        return JSONResponse({"error": "CABINET_TEMP_URL not configured"}, status_code=404)
+    return result
+
+
 @app.get("/api/history/system")
 def system_history():
     return stats.get_system_history()

@@ -156,6 +156,12 @@ The weather card uses the viewer's browser geolocation — no API key required. 
 |----------|---------|-------------|
 | `WEATHER_UNITS` | `metric` | Temperature and wind speed units: `metric` (°C, km/h) or `imperial` (°F, mph). |
 
+### Cabinet Temperature
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CABINET_TEMP_URL` | (unset) | URL of the cabinet sensor API (e.g. `http://10.99.99.37/api`). Set this to enable the Cabinet card. Expected JSON: `temperature_c`, `temperature_f`, `humidity`, `comfort`, `uptime_ms`. |
+
 The card appears automatically once the browser grants location permission.
 
 ### HTTPS — manual certificates

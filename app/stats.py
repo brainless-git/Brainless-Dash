@@ -1201,6 +1201,7 @@ def _compact_sonarr(sonarr):
 
 
 def collect_all(base_url: str = ""):
+    from . import cabinet as _cabinet
     from . import spotify as _spotify
     from . import unifi as _unifi
     result = {
@@ -1232,6 +1233,9 @@ def collect_all(base_url: str = ""):
     uf = _unifi.get_unifi()
     if uf is not None:
         result["unifi"] = uf
+    cab = _cabinet.get_cabinet()
+    if cab is not None:
+        result["cabinet"] = cab
     sp = _spotify.get_playback()
     if sp is not None:
         if not sp.get("authorized"):

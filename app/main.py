@@ -6,7 +6,7 @@ from fastapi import Body, FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import spotify, stats, unifi
+from . import cabinet, spotify, stats, unifi
 
 app = FastAPI(title="Brainless-Dash", version="1.0.0")
 
@@ -176,6 +176,14 @@ def unifi_stats():
     result = unifi.get_unifi()
     if result is None:
         return JSONResponse({"error": "UNIFI_URL / UNIFI_USERNAME not configured"}, status_code=404)
+    return result
+
+
+@app.get("/api/cabinet")
+def cabinet_stats():
+    result = cabinet.get_cabinet()
+    if result is None:
+        return JSONResponse({"error": "CABINET_TEMP_URL not configured"}, status_code=404)
     return result
 
 

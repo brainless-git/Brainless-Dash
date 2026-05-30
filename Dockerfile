@@ -61,6 +61,7 @@ ENV PORT=8090 \
     SPOTIFY_REDIRECT_URI= \
     SPOTIFY_TOKEN_FILE=/tmp/spotify_token.json \
     WEATHER_UNITS=metric \
+    CABINET_TEMP_URL= \
     HTTPS_CERT= \
     HTTPS_KEY= \
     ACME_DOMAIN= \

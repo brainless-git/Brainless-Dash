@@ -1037,6 +1037,24 @@
       unifiCard.style.display = 'none';
     }
 
+    // Cabinet temperature
+    const cabCard = $('card-cabinet');
+    if (d.cabinet) {
+      cabCard.style.display = '';
+      const cab = d.cabinet;
+      if (!cab.available) {
+        $('cabinet-meta').textContent    = cab.error || 'unavailable';
+        $('cabinet-temp').textContent    = '—';
+        $('cabinet-humidity').textContent = '—';
+      } else {
+        $('cabinet-meta').textContent    = cab.comfort || '';
+        $('cabinet-temp').textContent    = cab.temperature_c.toFixed(1) + '°C';
+        $('cabinet-humidity').textContent = cab.humidity.toFixed(0) + '%';
+      }
+    } else {
+      cabCard.style.display = 'none';
+    }
+
     // Minecraft
     const mcCard = $('card-minecraft');
     if (d.minecraft) {
@@ -1200,6 +1218,7 @@
     sonarr:      { title: 'Sonarr',        endpoint: '/api/sonarr',         render: renderSonarrDetail },
     plex:        { title: 'Plex',          endpoint: '/api/plex',           render: renderPlexDetail },
     unifi:       { title: 'UniFi',         endpoint: '/api/unifi',          render: renderUnifiDetail },
+    cabinet:     { title: 'Cabinet',       endpoint: '/api/cabinet',        render: renderCabinetDetail },
     temps:       { title: 'Temperatures',  endpoint: '/api/temps',          render: renderTempsDetail },
     network:     { title: 'Network',       endpoint: '/api/network',        render: renderNetworkDetail },
     storage:     { title: 'Storage',       endpoint: '/api/storage',        render: renderStorageDetail },
@@ -1927,6 +1946,28 @@
     }
 
     $('detail-body').innerHTML = body;
+  }
+
+  function renderCabinetDetail(data) {
+    if (!data.available) {
+      $('detail-meta').textContent = 'unavailable';
+      $('detail-body').innerHTML = '<div class="detail-section"><div class="empty">' +
+        esc(data.error || 'sensor unavailable') + '</div></div>';
+      return;
+    }
+
+    $('detail-meta').textContent = data.comfort || '';
+
+    const uptimeSecs = Math.floor((data.uptime_ms || 0) / 1000);
+    const statsHtml =
+      statItem('Temperature', data.temperature_c.toFixed(1) + '°C') +
+      statItem('', data.temperature_f.toFixed(1) + '°F') +
+      statItem('Humidity', data.humidity.toFixed(1) + '%') +
+      statItem('Comfort', data.comfort || '—') +
+      (uptimeSecs ? statItem('Sensor uptime', fmtUptime(uptimeSecs)) : '');
+
+    $('detail-body').innerHTML =
+      '<div class="detail-section"><div class="detail-stats">' + statsHtml + '</div></div>';
   }
 
   function renderTempsDetail(data) {

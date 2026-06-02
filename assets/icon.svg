@@ -1,28 +1,75 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Brainless-Dash">
   <title>Brainless-Dash</title>
-  <desc>A red ghost mascot with motion lines, dashing forward</desc>
-  <g>
-    <line x1="20" y1="100" x2="80" y2="100" stroke="#e22828" stroke-width="6" stroke-linecap="round" opacity="0.25"/>
-    <line x1="14" y1="130" x2="76" y2="130" stroke="#e22828" stroke-width="6" stroke-linecap="round" opacity="0.45"/>
-    <line x1="22" y1="160" x2="84" y2="160" stroke="#e22828" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
-  </g>
-  <g>
-    <path d="
-      M 100 110
-      C 100 50, 220 50, 220 110
-      L 220 200
-      C 212 215, 200 208, 192 195
-      C 184 210, 168 210, 160 195
-      C 152 210, 136 210, 128 195
-      C 120 210, 108 215, 100 200
-      Z
-    " fill="#e22828"/>
-    <ellipse cx="138" cy="120" rx="14" ry="18" fill="#ffffff"/>
-    <ellipse cx="186" cy="120" rx="14" ry="18" fill="#ffffff"/>
-    <circle cx="142" cy="124" r="6" fill="#1c1c1c"/>
-    <circle cx="190" cy="124" r="6" fill="#1c1c1c"/>
-    <circle cx="144" cy="121" r="2" fill="#ffffff"/>
-    <circle cx="192" cy="121" r="2" fill="#ffffff"/>
-    <path d="M 145 160 Q 162 175 179 160" stroke="#1c1c1c" stroke-width="3" stroke-linecap="round" fill="none"/>
-  </g>
+  <desc>Flaming skull and crossbones</desc>
+  <defs>
+    <linearGradient id="fg" x1="0" y1="1" x2="0" y2="0" gradientUnits="objectBoundingBox">
+      <stop offset="0%"   stop-color="#FFE000"/>
+      <stop offset="40%"  stop-color="#FF6600"/>
+      <stop offset="85%"  stop-color="#DD1100"/>
+      <stop offset="100%" stop-color="#880000" stop-opacity="0.5"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="256" height="256" fill="#000"/>
+
+  <!-- ── Crossbones (drawn behind skull) ── -->
+  <!-- NW→SE bone shaft -->
+  <line x1="48" y1="96" x2="208" y2="184" stroke="#F5A800" stroke-width="18" stroke-linecap="round"/>
+  <!-- NW knobs -->
+  <circle cx="44"  cy="88"  r="18" fill="#F5A800"/>
+  <circle cx="56"  cy="102" r="12" fill="#F5A800"/>
+  <!-- SE knobs -->
+  <circle cx="212" cy="192" r="18" fill="#F5A800"/>
+  <circle cx="200" cy="178" r="12" fill="#F5A800"/>
+
+  <!-- NE→SW bone shaft -->
+  <line x1="208" y1="96" x2="48" y2="184" stroke="#F5A800" stroke-width="18" stroke-linecap="round"/>
+  <!-- NE knobs -->
+  <circle cx="212" cy="88"  r="18" fill="#F5A800"/>
+  <circle cx="200" cy="102" r="12" fill="#F5A800"/>
+  <!-- SW knobs -->
+  <circle cx="44"  cy="192" r="18" fill="#F5A800"/>
+  <circle cx="56"  cy="178" r="12" fill="#F5A800"/>
+
+  <!-- ── Skull ── -->
+  <!-- Black mask over crossbones where skull sits -->
+  <circle cx="128" cy="158" r="58" fill="#000"/>
+  <!-- Skull cranium outline -->
+  <circle cx="128" cy="158" r="58" fill="none" stroke="#F5A800" stroke-width="5"/>
+
+  <!-- Skull top cylinder (open top where flames emerge) -->
+  <!-- Black fill to erase crossbones inside cylinder -->
+  <rect x="96" y="100" width="64" height="36" fill="#000"/>
+  <!-- Cylinder side walls -->
+  <line x1="96"  y1="100" x2="96"  y2="136" stroke="#F5A800" stroke-width="5"/>
+  <line x1="160" y1="100" x2="160" y2="136" stroke="#F5A800" stroke-width="5"/>
+  <!-- Cylinder top rim -->
+  <ellipse cx="128" cy="100" rx="32" ry="11" fill="#111" stroke="#F5A800" stroke-width="5"/>
+
+  <!-- Eyes (solid gold dots) -->
+  <circle cx="112" cy="155" r="17" fill="#F5A800"/>
+  <circle cx="144" cy="155" r="17" fill="#F5A800"/>
+
+  <!-- Nose (triangle) -->
+  <polygon points="128,170 119,188 137,188" fill="#F5A800"/>
+
+  <!-- Jaw line -->
+  <line x1="100" y1="198" x2="156" y2="198" stroke="#F5A800" stroke-width="5"/>
+  <!-- Three teeth -->
+  <rect x="104" y="198" width="13" height="16" rx="3" fill="#F5A800"/>
+  <rect x="121" y="198" width="13" height="16" rx="3" fill="#F5A800"/>
+  <rect x="138" y="198" width="13" height="16" rx="3" fill="#F5A800"/>
+
+  <!-- ── Flames (above the rim) ── -->
+  <!-- Far-left flame -->
+  <path d="M100,100 C97,88 90,82 93,68 C88,78 82,72 86,58 C90,70 93,62 95,52 C97,65 94,76 99,71 C97,82 100,93 100,100Z" fill="url(#fg)"/>
+  <!-- Left flame -->
+  <path d="M112,100 C109,84 102,76 106,58 C102,72 95,66 99,50 C104,64 108,56 110,44 C112,58 109,72 115,66 C113,78 112,91 112,100Z" fill="url(#fg)"/>
+  <!-- Centre flame (tallest) -->
+  <path d="M128,100 C125,78 116,67 120,46 C116,62 108,57 113,38 C118,54 124,46 126,30 C128,46 132,54 137,38 C142,57 134,62 130,46 C134,67 131,78 128,100Z" fill="url(#fg)"/>
+  <!-- Right flame -->
+  <path d="M144,100 C144,91 143,78 141,66 C147,72 144,58 146,44 C148,56 152,64 157,50 C161,66 155,72 151,58 C155,76 148,84 145,100Z" fill="url(#fg)"/>
+  <!-- Far-right flame -->
+  <path d="M156,100 C156,93 159,82 157,71 C162,76 159,65 161,52 C163,62 166,70 170,58 C174,72 168,78 163,68 C166,82 159,88 156,100Z" fill="url(#fg)"/>
 </svg>

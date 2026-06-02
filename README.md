@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>A brainless little ghost that dashes around your Unraid server reporting on its health.</strong>
+  <strong>A brainless flaming skull that dashes around your Unraid server reporting on its health.</strong>
 </p>
 
 <p align="center">

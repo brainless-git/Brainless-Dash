@@ -8,8 +8,8 @@
   --text: #e8e8e8;
   --text-dim: #9a9a9a;
   --text-faint: #666;
-  --accent: #e22828;          /* Unraid red */
-  --accent-glow: #ff4444;
+  --accent: #F5A800;          /* Skull gold */
+  --accent-glow: #FFD060;
   --accent-orange: #f15a29;
   --ok: #4caf50;
   --warn: #ffb300;
@@ -59,7 +59,7 @@ body {
   width: 22px;
   height: 24px;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 6px rgba(226, 40, 40, 0.4));
+  filter: drop-shadow(0 0 6px rgba(245, 168, 0, 0.4));
 }
 .brand-name { font-size: 13px; }
 .brand-accent { color: var(--accent); }

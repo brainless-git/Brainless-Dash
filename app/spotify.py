@@ -274,19 +274,15 @@ def _fmt_track(item: dict) -> dict:
 
 # ── Playback state ─────────────────────────────────────────────────────────────
 
-def _fetch_playback() -> dict:
-    with _tok_lock:
-        has_refresh = bool(_refresh_token)
-        has_access  = bool(_access_token)
-    if not has_refresh and not has_access:
-        return {"configured": True, "authorized": False}
+# Last successful active-playback result, kept briefly so a transient API
+# error (rate limit, 5xx, network blip) doesn't blank the card mid-song.
+_last_active: dict | None = None
+_last_active_ts = 0.0
+_STALE_TOLERANCE = 60   # seconds
 
-    status, data = _api_get("/me/player?additional_types=track,episode")
-    if status == 401:
-        return {"configured": True, "authorized": False}
-    if status == 204 or not data:
-        return {"configured": True, "authorized": True, "active": False}
 
+def _parse_playback(data: dict) -> dict:
+    """Build the playback dict from a /me/player or /me/player/currently-playing payload."""
     item      = data.get("item") or {}
     item_type = data.get("currently_playing_type", "track")
     is_playing = data.get("is_playing", False)
@@ -302,8 +298,7 @@ def _fetch_playback() -> dict:
         album  = (item.get("album") or {}).get("name", "")
         images = (item.get("album") or {}).get("images") or []
 
-    art_url = _pick_image(images)
-
+    # device/shuffle/repeat are absent from the currently-playing payload
     device = data.get("device") or {}
 
     return {
@@ -314,7 +309,7 @@ def _fetch_playback() -> dict:
         "track":         track,
         "artist":        artist,
         "album":         album,
-        "art_url":       art_url,
+        "art_url":       _pick_image(images),
         "progress_ms":   data.get("progress_ms") or 0,
         "duration_ms":   item.get("duration_ms") or 0,
         "shuffle":       data.get("shuffle_state", False),
@@ -326,16 +321,52 @@ def _fetch_playback() -> dict:
     }
 
 
+def _fetch_playback() -> dict:
+    global _last_active, _last_active_ts
+    with _tok_lock:
+        has_refresh = bool(_refresh_token)
+        has_access  = bool(_access_token)
+    if not has_refresh and not has_access:
+        return {"configured": True, "authorized": False}
+
+    status, data = _api_get("/me/player?additional_types=track,episode")
+    if status == 401:
+        return {"configured": True, "authorized": False}
+
+    if status == 200 and data and data.get("item"):
+        result = _parse_playback(data)
+        _last_active, _last_active_ts = result, time.time()
+        return result
+
+    if status == 204 or (status == 200 and (not data or not data.get("item"))):
+        # /me/player returns 204 for some Connect devices (TVs, speakers,
+        # consoles) even while music is playing. currently-playing usually
+        # still reports the track in that case, so check it before declaring idle.
+        s2, d2 = _api_get("/me/player/currently-playing?additional_types=track,episode")
+        if s2 == 200 and d2 and d2.get("item"):
+            result = _parse_playback(d2)
+            _last_active, _last_active_ts = result, time.time()
+            return result
+        _last_active = None
+        return {"configured": True, "authorized": True, "active": False}
+
+    # Transient failure (rate limit, 5xx, network error): hold the last known
+    # active state briefly rather than blanking the card.
+    if _last_active and time.time() - _last_active_ts < _STALE_TOLERANCE:
+        return {**_last_active, "stale": True}
+    return {"configured": True, "authorized": True, "active": False}
+
+
 def _poll_worker() -> None:
     global _poll_result
     while True:
         try:
             result = _fetch_playback()
+            with _poll_lock:
+                _poll_result = result
         except Exception as exc:
+            # Keep the previous result rather than clobbering it with idle
             log.warning("Spotify poll error: %s", exc)
-            result = {"configured": True, "authorized": True, "active": False}
-        with _poll_lock:
-            _poll_result = result
         time.sleep(_POLL_SEC)
 
 

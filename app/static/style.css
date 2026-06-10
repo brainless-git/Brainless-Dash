@@ -598,16 +598,9 @@ body {
   outline: none;
 }
 .module-card:active { transform: translateY(0) scale(0.995); }
-.module-card .card-head::after {
-  content: "›";
-  color: var(--text-faint);
-  font-size: 18px;
-  line-height: 1;
-  margin-left: 8px;
-  align-self: center;
-  transition: transform 0.3s var(--ease-spring), color 0.2s ease;
-}
-.module-card:hover .card-head::after {
+/* Suppress the duplicate ::after chevron — the HTML .chevron span handles it */
+.module-card .card-head::after { content: none; }
+.module-card:hover .chevron {
   transform: translateX(3px);
   color: var(--accent);
 }

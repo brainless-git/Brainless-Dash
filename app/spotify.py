@@ -329,29 +329,61 @@ def _fetch_playback() -> dict:
     if not has_refresh and not has_access:
         return {"configured": True, "authorized": False}
 
-    status, data = _api_get("/me/player?additional_types=track,episode")
-    if status == 401:
+    # Query both endpoints on every poll. /me/player has device/shuffle/repeat
+    # detail; /me/player/currently-playing reliably reports the playing track
+    # for Connect devices (TVs, speakers, consoles) where /me/player can
+    # return 204 or stale/paused state even while music plays.
+    status1, d1 = _api_get("/me/player?additional_types=track,episode")
+    if status1 == 401:
         return {"configured": True, "authorized": False}
 
-    if status == 200 and data and data.get("item"):
-        result = _parse_playback(data)
+    status2, d2 = _api_get("/me/player/currently-playing?additional_types=track,episode")
+    if status2 == 401:
+        return {"configured": True, "authorized": False}
+
+    # Classify each response
+    active_data = None   # response with is_playing=true
+    paused_data = None   # response with item but is_playing=false
+    device_data = None   # /me/player data carrying device/control fields
+
+    if status1 == 200 and d1:
+        if d1.get("item"):
+            if d1.get("is_playing"):
+                active_data = d1
+            else:
+                paused_data = d1
+        if d1.get("device"):
+            device_data = d1
+
+    if status2 == 200 and d2 and d2.get("item"):
+        if d2.get("is_playing"):
+            if not active_data:
+                active_data = d2   # prefer /me/player when both are playing
+        elif not paused_data:
+            paused_data = d2
+
+    best = active_data or paused_data
+    if best:
+        result = _parse_playback(best)
+        # When we used currently-playing as the primary source, overlay the
+        # device/shuffle/repeat/volume detail that only /me/player carries.
+        if device_data and device_data is not best:
+            dev = device_data.get("device") or {}
+            result["device_name"] = dev.get("name", "") or result["device_name"]
+            if result["volume"] is None:
+                result["volume"] = dev.get("volume_percent")
+            result["shuffle"] = device_data.get("shuffle_state", result["shuffle"])
+            result["repeat"]  = device_data.get("repeat_state",  result["repeat"])
         _last_active, _last_active_ts = result, time.time()
         return result
 
-    if status == 204 or (status == 200 and (not data or not data.get("item"))):
-        # /me/player returns 204 for some Connect devices (TVs, speakers,
-        # consoles) even while music is playing. currently-playing usually
-        # still reports the track in that case, so check it before declaring idle.
-        s2, d2 = _api_get("/me/player/currently-playing?additional_types=track,episode")
-        if s2 == 200 and d2 and d2.get("item"):
-            result = _parse_playback(d2)
-            _last_active, _last_active_ts = result, time.time()
-            return result
+    # Both endpoints confirm nothing is playing
+    if status1 in (200, 204) or status2 in (200, 204):
         _last_active = None
         return {"configured": True, "authorized": True, "active": False}
 
-    # Transient failure (rate limit, 5xx, network error): hold the last known
-    # active state briefly rather than blanking the card.
+    # Both endpoints failed (rate limit, 5xx, network error): hold the last
+    # known active state briefly rather than blanking the card mid-song.
     if _last_active and time.time() - _last_active_ts < _STALE_TOLERANCE:
         return {**_last_active, "stale": True}
     return {"configured": True, "authorized": True, "active": False}

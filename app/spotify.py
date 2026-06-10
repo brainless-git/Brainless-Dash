@@ -379,11 +379,15 @@ def _fetch_playback() -> dict:
 
     # Both endpoints confirm nothing is playing
     if status1 in (200, 204) or status2 in (200, 204):
+        log.info("Spotify: idle — /me/player=%d (item=%s, playing=%s) /currently-playing=%d (item=%s, playing=%s)",
+                 status1, bool(d1 and d1.get("item")), bool(d1 and d1.get("is_playing")),
+                 status2, bool(d2 and d2.get("item")), bool(d2 and d2.get("is_playing")))
         _last_active = None
         return {"configured": True, "authorized": True, "active": False}
 
     # Both endpoints failed (rate limit, 5xx, network error): hold the last
     # known active state briefly rather than blanking the card mid-song.
+    log.info("Spotify: transient error — /me/player=%d /currently-playing=%d", status1, status2)
     if _last_active and time.time() - _last_active_ts < _STALE_TOLERANCE:
         return {**_last_active, "stale": True}
     return {"configured": True, "authorized": True, "active": False}

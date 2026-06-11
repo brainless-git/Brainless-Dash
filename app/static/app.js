@@ -1261,6 +1261,10 @@
   function showDetail() {
     document.querySelector('.content').style.display = 'none';
     $('detail').style.display = '';
+    // Play the entrance animation on open only; refreshes re-render without it.
+    const body = $('detail-body');
+    body.classList.add('entering');
+    setTimeout(() => body.classList.remove('entering'), 700);
     renderDetail();
     window.scrollTo(0, 0);
   }
